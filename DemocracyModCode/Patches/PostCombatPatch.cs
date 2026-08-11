@@ -16,12 +16,12 @@ public static class PostCombatPatch
     public static class TriggerDemocracyAfterCombat
     {
         [HarmonyPostfix]
-        static void Postfix(RewardSynchronizer __instance, CombatRoom room)
+        static void Postfix(RewardSynchronizer __instance, CombatRoom __0)
         {
             if (!CombatRewardPatch.IsDemocracyActive) return;
             MainFile.Logger.Info("=== Combat ended. Collecting rewards for Democracy pool ===");
             MultiplayerCoordinator.InitializeForRun();
-            CollectAndPoolRewards(room);
+            CollectAndPoolRewards(__0);
 
             if (RewardPool.HasPending)
             {

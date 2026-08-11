@@ -1,11 +1,11 @@
-﻿{
+{
   "id": "DemocracyMod",
   "name": "Democracy",
   "author": "james",
   "description": "Multiplayer reward democracy. Pool all combat rewards and vote on who gets what. Anyone can take anything — if they have the votes.",
   "version": "v0.1.0",
-  "min_game_version": "0.107.0",
-  "has_pck": true,
+  "min_game_version": "0.110.0",
+  "has_pck": false,
   "has_dll": true,
   "dependencies": [
     {"id": "BaseLib", "min_version": "3.4.0"}
