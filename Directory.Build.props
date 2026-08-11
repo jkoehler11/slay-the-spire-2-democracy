@@ -1,0 +1,16 @@
+<Project>
+    <PropertyGroup>
+        <!-- MegaDot / Godot 4.5.1 mono executable for export-pack when publishing -->
+        <GodotPath>C:/megadot/MegaDot_v4.5.1-stable_mono_win64.exe</GodotPath>
+
+        <!-- If STS2 is not found automatically, uncomment and set manually -->
+        <!-- <Sts2Path>?/steamapps/common/Slay the Spire 2</Sts2Path> -->
+
+        <!-- Allow unsafe blocks for direct memory access if needed -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <PublicizeSts>true</PublicizeSts>
+
+        <!-- Disable architecture mismatch warning; mods are built as MSIL -->
+        <NoWarn>$(NoWarn);MSB3270</NoWarn>
+    </PropertyGroup>
+</Project>

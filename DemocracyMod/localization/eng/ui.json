@@ -1,0 +1,48 @@
+{
+  "DemocracyMod": {
+    "VotePanelTitle": "🗳 DEMOCRACY VOTE",
+    "VotePanelReward": "Reward: {0}",
+    "VotePanelTimeRemaining": "Time remaining: {0}s",
+    "VotePanelVoteFor": "Vote for:",
+    "VotePanelVotesCast": "Votes cast: {0}/{1}",
+    "VotePanelYou": "{0} (you)",
+    "VotePanelVoteCast": "✓ Voted",
+    "VotePanelWaiting": "Waiting...",
+    "VotePanelPressToVote": "Click a player to vote",
+    "VotePanelTimeout": "Time's up! Auto-voting...",
+
+    "NegotiationTitle": "💬 NEGOTIATION",
+    "NegotiationExpressInterest": "Click a reward to express interest",
+    "NegotiationInterested": "{0} is interested",
+    "NegotiationTimeRemaining": "Discussion: {0}s",
+
+    "ResultTitle": "🗳 VOTE RESULT",
+    "ResultWinner": "{0} receives: {1}",
+    "ResultTieBreak": "Tie broken by weighted random",
+    "ResultPressToContinue": "Click to continue...",
+
+    "PoolDisplayTitle": "DEMOCRACY POOL ({0} rewards)",
+    "PoolDisplayGold": "🪙 {0} Gold (from {1})",
+    "PoolDisplayCard": "🂡 Card Reward (from {1})",
+    "PoolDisplayPotion": "🧪 {0} (from {1})",
+    "PoolDisplayRelic": "📿 {0} (from {1})",
+    "PoolDisplayBossRelic": "👑 Boss Relic: {0}",
+
+    "ConfigVoteTimeout": "Vote Timeout (seconds)",
+    "ConfigNegotiationTimeout": "Negotiation Timeout (seconds)",
+    "ConfigShopDemocracy": "Shop Democracy",
+    "ConfigShopRedistribute": "Redistribute Shop Gold",
+    "ConfigSelfishDefault": "Selfish Default (auto-vote self on timeout)",
+    "ConfigTieBreakFairness": "Tie-Break Fairness",
+    "ConfigOpenVoting": "Open Voting (show votes live)",
+    "ConfigDeadCanVote": "Dead Players Can Vote",
+
+    "ShopPooledGold": "Pooled Gold: {0}",
+    "ShopVoteToBuy": "Vote to buy {0} for {1}?",
+
+    "ModEnabled": "Democracy is active ({0} players)",
+    "ModDisabled": "Democracy is idle (single player)",
+    "PoolEmpty": "No rewards in pool",
+    "BeltFull": "Potion belt full — skipping to next player"
+  }
+}

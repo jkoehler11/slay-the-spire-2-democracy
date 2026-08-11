@@ -1,0 +1,15 @@
+; Engine configuration file for Godot.
+; This is a C# mod project — no scenes are loaded directly by Godot.
+; The file is required for Godot export-pack to generate .pck assets.
+
+config_version=5
+
+[application]
+config/name="DemocracyMod"
+config/features=PackedStringArray("4.5")
+
+[dotnet]
+project/assembly_name="DemocracyMod"
+
+[editor_plugins]
+enabled=PackedStringArray()

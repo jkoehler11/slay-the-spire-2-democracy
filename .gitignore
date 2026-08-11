@@ -1,0 +1,30 @@
+# Build output
+bin/
+obj/
+build/
+out/
+*.dll
+*.pdb
+*.pck
+
+# IDE
+.idea/
+*.sln.DotSettings.user
+.vs/
+.vscode/
+*.swp
+*.swo
+
+# Godot
+.godot/
+export_presets.cfg
+
+# NuGet
+*.nupkg
+
+# OS
+.DS_Store
+Thumbs.db
+
+# STS2 local (do not commit game files)
+desktop-1.0.jar

@@ -1,0 +1,73 @@
+[gd_scene load_steps=2 format=3 uid="uid://democracy_vote_panel"]
+
+[ext_resource type="Script" path="res://DemocracyModCode/VotePanel.cs" id="1_vote_script"]
+
+[node name="VotePanel" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_vote_script")
+
+[node name="Background" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -250.0
+offset_top = -200.0
+offset_right = 250.0
+offset_bottom = 200.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Background"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 8
+
+[node name="TitleLabel" type="Label" parent="Background/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "🗳 DEMOCRACY VOTE"
+horizontal_alignment = 1
+
+[node name="RewardNameLabel" type="Label" parent="Background/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Reward: "
+horizontal_alignment = 1
+
+[node name="TimerLabel" type="Label" parent="Background/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Time: 45s"
+horizontal_alignment = 1
+
+[node name="HSeparator" type="HSeparator" parent="Background/VBoxContainer"]
+layout_mode = 2
+
+[node name="PlayerList" type="VBoxContainer" parent="Background/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="VoteCountLabel" type="Label" parent="Background/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Votes: 0/0"
+horizontal_alignment = 1
+
+[node name="StatusLabel" type="Label" parent="Background/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Click a player to vote"
+horizontal_alignment = 1
