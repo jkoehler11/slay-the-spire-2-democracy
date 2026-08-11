@@ -52,7 +52,7 @@ public static class MultiplayerCoordinator
 
     public static IReadOnlyList<Player> GetPlayers()
     {
-        var cs = CombatManager.Instance?.State;
+        var cs = Traverse.Create(CombatManager.Instance).Property<ICombatState>("State").Value;
         if (cs != null) return cs.PlayerCreatures.Select(c => c.Player!).Where(p => p != null).ToList()!;
         return Array.Empty<Player>();
     }
