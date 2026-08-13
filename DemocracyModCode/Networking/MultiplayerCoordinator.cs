@@ -21,49 +21,19 @@ public static class MultiplayerCoordinator
         if (ns != null) CustomMessageWrapper.Send(msg, ns);
     }
 
-    public static void BroadcastPoolUpdate()
-    {
-        var pending = RewardPool.GetPending();
-        var msg = new DemocracyPoolUpdateMessage { EntryCount = pending.Count, TotalGoldPooled = RewardPool.TotalGoldPooled };
-        foreach (var e in pending) msg.Entries.Add((e.Id, e.Type.ToString(), e.SourcePlayerId, e.DisplayName, e.GoldAmount));
-        Send(msg);
-    }
-
-    public static void SendVoteStart(string entryId, string displayName, int timeoutSeconds)
-        => Send(new DemocracyVoteStartMessage { RewardId = entryId, RewardName = displayName, TimeoutSeconds = timeoutSeconds });
-
-    public static void SendVoteResult(string entryId, ulong winnerId, Dictionary<ulong, ulong> tally)
-    {
-        var msg = new DemocracyVoteResultMessage { RewardId = entryId, WinnerId = winnerId, VoteCount = tally.Count };
-        foreach (var (v, t) in tally) msg.Votes.Add((v, t));
-        Send(msg);
-    }
+    public static void SendClaim(int goldAmount, List<string> rewardIds)
+        => Send(new DemocracyClaimMessage { GoldAmount = goldAmount, RewardIds = rewardIds });
 
     public static void SendPoolDistributed() => Send(new DemocracyPoolDistributedMessage());
-    public static void SendVote(string entryId, ulong targetPlayerId) => Send(new DemocracyVoteCastMessage { RewardId = entryId, TargetPlayerId = targetPlayerId });
-    public static void SendInterest(string entryId) => Send(new DemocracyInterestMessage { RewardId = entryId });
 
-    internal static void HandlePoolUpdate(DemocracyPoolUpdateMessage msg) { }
-    internal static void HandleVoteStart(DemocracyVoteStartMessage msg) { }
-    internal static void HandleVoteResult(DemocracyVoteResultMessage msg)
+    internal static void HandleClaim(ulong senderId, DemocracyClaimMessage msg)
     {
-        RewardPool.MarkDistributed(msg.RewardId, msg.WinnerId);
+        VoteManager.SubmitClaim(senderId, msg.GoldAmount, msg.RewardIds);
     }
-
-    public static IReadOnlyList<Player> GetPlayers()
-    {
-        var cs = Traverse.Create(CombatManager.Instance).Property<ICombatState>("State").Value;
-        if (cs != null) return cs.PlayerCreatures.Select(c => c.Player!).Where(p => p != null).ToList()!;
-        return Array.Empty<Player>();
-    }
-
-    public static int GetPlayerCount() => GetPlayers().Count;
 
     public static void InitializeForRun()
     {
         var pt = (SteamInitializer.Initialized && !MegaCrit.Sts2.Core.Helpers.CommandLineHelper.HasArg("fastmp")) ? PlatformType.Steam : PlatformType.None;
         LocalPlayerId = PlatformUtil.GetLocalPlayerId(pt);
-        var players = GetPlayers();
-        IsHost = players.Count > 0 && players[0].NetId == LocalPlayerId;
     }
 }

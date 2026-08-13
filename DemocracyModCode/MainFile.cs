@@ -4,8 +4,8 @@ using HarmonyLib;
 using MegaCrit.Sts2.Core.Modding;
 using BaseLib.Utils;
 using BaseLib.Abstracts;
+using BaseLib.Config;
 using DemocracyMod.DemocracyModCode.Patches;
-using DemocracyMod.DemocracyModCode.Networking;
 
 namespace DemocracyMod.DemocracyModCode;
 
@@ -13,17 +13,26 @@ namespace DemocracyMod.DemocracyModCode;
 public partial class MainFile : Node
 {
     public const string ModId = "DemocracyMod";
+
     public static MegaCrit.Sts2.Core.Logging.Logger Logger { get; } =
         new(ModId, MegaCrit.Sts2.Core.Logging.LogType.Generic);
 
     public static void Initialize()
     {
         Logger.Info("=== Democracy Mod v0.1.0 Initializing ===");
-        RewardPool.RegisterSpireFields();
-        DemocracyConfig.Load();
+
+        ModConfigRegistry.Register(ModId, new DemocracyConfig());
+
         Harmony harmony = new(ModId);
         harmony.PatchAll();
-        Logger.Info($"Harmony patches applied: {harmony.GetPatchedMethods().Count()} methods");
+        var patched = harmony.GetPatchedMethods().ToList();
+        Logger.Info(string.Format("Harmony patches applied: {0} methods", patched.Count));
+        foreach (var m in patched)
+            Logger.Info(string.Format("  patched: {0}.{1}", m.DeclaringType?.FullName, m.Name));
+
+        CombatRewardPatch.IsDemocracyActive = true;
+        Logger.Info("Democracy pooling active. Vote triggers when 2+ players contribute.");
+
         Logger.Info("Democracy Mod initialized. Awaiting multiplayer session.");
     }
 }

@@ -1,153 +1,174 @@
 using DemocracyMod.DemocracyModCode;
 using DemocracyMod.DemocracyModCode.Networking;
+using DemocracyMod.DemocracyModCode.Patches;
 
 namespace DemocracyMod.DemocracyModCode;
 
+/// <summary>
+/// Claim-based distribution. Each player claims the rewards they want
+/// (checkbox for indivisible rewards, gold amount for the gold pool).
+/// Host/any client resolves deterministically once all players submit.
+/// </summary>
 public static class VoteManager
 {
-    public enum Phase { Idle, Negotiation, Voting, Resolved }
-
-    public class VoteState
+    public class Claim
     {
-        public string EntryId { get; init; } = "";
-        public List<ulong> EligibleVoterIds { get; init; } = new();
-        public Dictionary<ulong, ulong> Votes { get; } = new();
-        public Phase CurrentPhase { get; set; } = Phase.Idle;
-        public ulong? WinnerId { get; set; }
-        public DateTime VoteStartTime { get; set; }
-        public bool AllVoted => Votes.Count >= EligibleVoterIds.Count;
-
-        public Dictionary<ulong, ulong> Tally()
-        {
-            var tally = new Dictionary<ulong, ulong>();
-            foreach (var target in Votes.Values)
-                tally[target] = tally.GetValueOrDefault(target, 0UL) + 1UL;
-            return tally;
-        }
+        public int GoldAmount { get; set; }
+        public List<string> RewardIds { get; } = new();
     }
 
-    private static readonly Dictionary<string, VoteState> VoteStates = new();
+    private static readonly Dictionary<ulong, Claim> _claims = new();
     private static readonly object LockObj = new();
-    private static readonly Dictionary<ulong, HashSet<string>> Interests = new();
-    private static string? _activeEntryId;
-    private static Phase _currentPhase = Phase.Idle;
+    private static volatile bool _resolutionDone;
 
-    public static Phase CurrentPhase => _currentPhase;
-    public static string? ActiveEntryId => _activeEntryId;
+    public static bool ResolutionDone => _resolutionDone;
+    public static bool HasSubmitted(ulong playerId) { lock (LockObj) return _claims.ContainsKey(playerId); }
 
-    public static bool StartNextEntry(List<ulong> playerIds)
+    public static void SubmitClaim(ulong playerId, int goldAmount, List<string> rewardIds)
     {
-        var pending = RewardPool.GetPending();
-        if (pending.Count == 0) { _currentPhase = Phase.Idle; _activeEntryId = null; return false; }
-        var entry = pending[0];
-        _activeEntryId = entry.Id;
-        var state = new VoteState { EntryId = entry.Id, EligibleVoterIds = new List<ulong>(playerIds) };
-        lock (LockObj) VoteStates[entry.Id] = state;
-        if (DemocracyConfig.NegotiationTimeoutSeconds > 0)
-            state.CurrentPhase = _currentPhase = Phase.Negotiation;
-        else BeginVoting(entry.Id);
-        return true;
-    }
-
-    public static void BeginVoting(string entryId)
-    {
-        VoteState? state;
-        lock (LockObj) VoteStates.TryGetValue(entryId, out state);
-        if (state == null) return;
-        state.CurrentPhase = Phase.Voting;
-        state.VoteStartTime = DateTime.UtcNow;
-        _currentPhase = Phase.Voting;
-        var entry = RewardPool.GetEntry(entryId);
-        MultiplayerCoordinator.SendVoteStart(entryId, entry?.DisplayName ?? entryId, DemocracyConfig.VoteTimeoutSeconds);
-    }
-
-    public static bool CastVote(ulong voterId, string entryId, ulong targetId)
-    {
-        VoteState? state;
-        lock (LockObj) VoteStates.TryGetValue(entryId, out state);
-        if (state == null || state.CurrentPhase != Phase.Voting) return false;
-        if (!state.EligibleVoterIds.Contains(voterId)) return false;
-        lock (LockObj) state.Votes[voterId] = targetId;
-        if (state.AllVoted) ResolveEntry(entryId);
-        return true;
-    }
-
-    public static void Update()
-    {
-        if (_currentPhase != Phase.Voting || _activeEntryId == null) return;
-        VoteState? state;
-        lock (LockObj) VoteStates.TryGetValue(_activeEntryId, out state);
-        if (state == null) return;
-        var elapsed = (DateTime.UtcNow - state.VoteStartTime).TotalSeconds;
-        if (DemocracyConfig.VoteTimeoutSeconds > 0 && elapsed > DemocracyConfig.VoteTimeoutSeconds)
+        lock (LockObj)
         {
-            AutoCastRemaining(_activeEntryId);
-            ResolveEntry(_activeEntryId);
+            _claims[playerId] = new Claim { GoldAmount = goldAmount };
+            _claims[playerId].RewardIds.AddRange(rewardIds);
         }
+        MainFile.Logger.Info(string.Format("Democracy: claim from P{0}: {1}g + {2} rewards",
+            playerId, goldAmount, rewardIds.Count));
+
+        CheckAndResolve();
     }
 
-    public static double GetRemainingTime()
+    private static void CheckAndResolve()
     {
-        if (_currentPhase != Phase.Voting || _activeEntryId == null) return -1;
-        VoteState? state;
-        lock (LockObj) VoteStates.TryGetValue(_activeEntryId, out state);
-        if (state == null) return -1;
-        return Math.Max(0, DemocracyConfig.VoteTimeoutSeconds - (DateTime.UtcNow - state.VoteStartTime).TotalSeconds);
+        int seen = CombatRewardPatch.GetSeenPlayerCount();
+        int submitted;
+        lock (LockObj) submitted = _claims.Count;
+
+        if (seen < 1) return;
+        if (submitted < seen) return;
+
+        ResolveClaims();
     }
 
-    public static void ExpressInterest(ulong playerId, string entryId)
+    private static void ResolveClaims()
     {
-        if (!Interests.ContainsKey(playerId)) Interests[playerId] = new HashSet<string>();
-        Interests[playerId].Add(entryId);
-    }
+        if (_resolutionDone) return;
+        _resolutionDone = true;
 
-    public static VoteState? GetVoteState(string entryId)
-    {
-        lock (LockObj) { VoteStates.TryGetValue(entryId, out var s); return s; }
-    }
+        var playerIds = CombatRewardPatch.GetSeenPlayerIds();
+        if (playerIds.Count == 0) return;
 
-    private static void AutoCastRemaining(string entryId)
-    {
-        VoteState? state;
-        lock (LockObj) VoteStates.TryGetValue(entryId, out state);
-        if (state == null) return;
-        var rng = Random.Shared;
-        foreach (var voter in state.EligibleVoterIds)
-            if (!state.Votes.ContainsKey(voter))
-                state.Votes[voter] = DemocracyConfig.SelfishDefault ? voter : state.EligibleVoterIds[rng.Next(state.EligibleVoterIds.Count)];
-    }
+        MainFile.Logger.Info(string.Format("Democracy: RESOLVING CLAIMS — {0} players", playerIds.Count));
 
-    private static void ResolveEntry(string entryId)
-    {
-        VoteState? state;
-        lock (LockObj) VoteStates.TryGetValue(entryId, out state);
-        if (state == null) return;
-        var tally = state.Tally();
-        ulong maxVotes = 0;
-        var leaders = new List<ulong>();
-        foreach (var (pid, count) in tally)
+        // --- Gold distribution ---
+        // Gold was already granted to each source player during auto-pick. Reclaim
+        // it first so the whole pool is redistributed from scratch per the vote.
+        var goldEntries = RewardPool.GetPending().Where(e => e.Type == RewardPool.PoolEntry.RewardType.GoldPile).ToList();
+        var autoGold = new Dictionary<ulong, int>();
+        foreach (var g in goldEntries)
+            autoGold[g.SourcePlayerId] = autoGold.GetValueOrDefault(g.SourcePlayerId, 0) + g.GoldAmount;
+        foreach (var kv in autoGold)
+            RewardPool.RemoveGold(kv.Key, kv.Value);
+
+        int totalGold = RewardPool.TotalGoldPooled;
+        int totalClaimedGold = 0;
+        lock (LockObj)
+            foreach (var c in _claims.Values) totalClaimedGold += c.GoldAmount;
+
+        MainFile.Logger.Info(string.Format("Democracy: gold — pool {0}g, claimed {1}g", totalGold, totalClaimedGold));
+
+        if (totalGold > 0)
         {
-            if (count > maxVotes) { maxVotes = count; leaders.Clear(); leaders.Add(pid); }
-            else if (count == maxVotes) leaders.Add(pid);
+            for (var i = 0; i < playerIds.Count; i++)
+            {
+                var pid = playerIds[i];
+                int claimed;
+                lock (LockObj) claimed = _claims.TryGetValue(pid, out var c) ? c.GoldAmount : 0;
+
+                int grant;
+                if (totalClaimedGold <= totalGold)
+                {
+                    // Give everyone what they asked for; split any leftover (or the
+                    // whole pool, if nobody claimed) evenly, remainder to first N.
+                    int leftover = totalGold - totalClaimedGold;
+                    grant = claimed + leftover / playerIds.Count + (i < leftover % playerIds.Count ? 1 : 0);
+                }
+                else
+                {
+                    // Over-claimed: scale proportionally.
+                    grant = totalClaimedGold > 0 ? (int)((long)claimed * totalGold / totalClaimedGold) : 0;
+                }
+
+                if (grant > 0)
+                    RewardPool.GrantGold(pid, grant);
+            }
         }
-        ulong winner = leaders.Count == 1 ? leaders[0] : TieBreak(leaders);
-        state.WinnerId = winner;
-        state.CurrentPhase = Phase.Resolved;
-        _currentPhase = Phase.Resolved;
-        RewardPool.MarkDistributed(entryId, winner);
-        MultiplayerCoordinator.SendVoteResult(entryId, winner, tally);
-        var playerIds = MultiplayerCoordinator.GetPlayers().Select(p => p.NetId).ToList();
-        if (!StartNextEntry(playerIds)) MultiplayerCoordinator.SendPoolDistributed();
+
+        // --- Non-gold rewards: grant to the winner (or discard) ---
+        var nonGold = RewardPool.GetNonGoldPending();
+        foreach (var entry in nonGold)
+        {
+            var claimants = new List<ulong>();
+            lock (LockObj)
+                foreach (var kv in _claims)
+                    if (kv.Value.RewardIds.Contains(entry.Id))
+                        claimants.Add(kv.Key);
+
+            if (claimants.Count == 1)
+            {
+                var winner = claimants[0];
+                if (winner == entry.SourcePlayerId)
+                {
+                    // Already granted to the source during auto-pick — keep it.
+                    RewardPool.MarkDistributed(entry.Id, winner);
+                    MainFile.Logger.Info(string.Format("Democracy: {0} -> P{1} (uncontested, already owned)", entry.DisplayName, winner));
+                }
+                else
+                {
+                    RewardPool.TransferReward(entry, winner);
+                    RewardPool.MarkDistributed(entry.Id, winner);
+                    MainFile.Logger.Info(string.Format("Democracy: {0} -> P{1} (uncontested, transferred)", entry.DisplayName, winner));
+                }
+            }
+            else if (claimants.Count > 1)
+            {
+                var winner = TieBreak(claimants);
+                if (winner == entry.SourcePlayerId)
+                {
+                    RewardPool.MarkDistributed(entry.Id, winner);
+                }
+                else
+                {
+                    RewardPool.TransferReward(entry, winner);
+                    RewardPool.MarkDistributed(entry.Id, winner);
+                }
+                MainFile.Logger.Info(string.Format("Democracy: {0} -> P{1} ({2} claimants, tie-broken)", entry.DisplayName, winner, claimants.Count));
+            }
+            else
+            {
+                // Unclaimed: discard.
+                RewardPool.DiscardReward(entry);
+                RewardPool.MarkDiscarded(entry.Id);
+                MainFile.Logger.Info(string.Format("Democracy: {0} unclaimed — discarded.", entry.DisplayName));
+            }
+        }
+
+        // Gold pool entries: mark resolved (gold was already granted above).
+        foreach (var entry in RewardPool.GetPending())
+            if (entry.Type == RewardPool.PoolEntry.RewardType.GoldPile)
+                RewardPool.MarkDiscarded(entry.Id);
+
+        MainFile.Logger.Info("Democracy: distribution complete.");
+        MultiplayerCoordinator.SendPoolDistributed();
     }
 
     private static ulong TieBreak(List<ulong> candidates)
     {
         if (candidates.Count == 1) return candidates[0];
+        // Fairness: players with fewer wins get a bonus weight
         var fairness = DemocracyConfig.TieBreakFairness;
-        var players = MultiplayerCoordinator.GetPlayers();
-        var pm = players.ToDictionary(p => p.NetId, p => p);
         var wc = new Dictionary<ulong, int>();
-        foreach (var c in candidates) wc[c] = pm.TryGetValue(c, out var p) ? RewardPool.PlayerWinCount[p] : 0;
+        foreach (var c in candidates)
+            wc[c] = RewardPool.PlayerWinCount.GetValueOrDefault(c, 0);
         var maxW = wc.Values.Max();
         var weights = candidates.Select(c => 1.0 + fairness * (maxW - wc[c])).ToList();
         var total = weights.Sum();
@@ -159,9 +180,7 @@ public static class VoteManager
 
     public static void Reset()
     {
-        lock (LockObj) VoteStates.Clear();
-        Interests.Clear();
-        _activeEntryId = null;
-        _currentPhase = Phase.Idle;
+        lock (LockObj) _claims.Clear();
+        _resolutionDone = false;
     }
 }

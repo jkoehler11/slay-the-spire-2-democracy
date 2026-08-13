@@ -1,76 +1,226 @@
 using Godot;
+using System.Collections.Generic;
 using DemocracyMod.DemocracyModCode;
 using DemocracyMod.DemocracyModCode.Networking;
+using DemocracyMod.DemocracyModCode.Patches;
 
 namespace DemocracyMod.DemocracyModCode;
 
-public partial class VotePanel : Control
+/// <summary>
+/// Claim-based reward distribution UI.
+/// - Checkbox per indivisible reward (card/potion/relic).
+/// - SpinBox for the amount of gold you want from the shared pool.
+/// - Submit broadcasts your claim; then shows "waiting for others".
+/// </summary>
+public partial class VotePanel : CanvasLayer
 {
-    private Label? _titleLabel;
-    private Label? _rewardNameLabel;
-    private Label? _timerLabel;
-    private VBoxContainer? _playerList;
-    private string _activeRewardId = "";
-    private readonly Dictionary<ulong, string> _playerNames = new();
-    private readonly HashSet<ulong> _votedPlayers = new();
-    private bool _isVisible;
+    private readonly Dictionary<string, CheckBox> _claimBoxes = new();
+    private SpinBox _goldSpin = null!;
+    private Label _status = null!;
+    private Button _submitBtn = null!;
+    private bool _submitted;
+    private int _timeout = 45;
+    private int _elapsed;
 
     public override void _Ready()
     {
-        _titleLabel = GetNodeOrNull<Label>("%TitleLabel");
-        _rewardNameLabel = GetNodeOrNull<Label>("%RewardNameLabel");
-        _timerLabel = GetNodeOrNull<Label>("%TimerLabel");
-        _playerList = GetNodeOrNull<VBoxContainer>("%PlayerList");
-        Hide();
+        Layer = 100;
+
+        // Blocking backdrop (this is a modal)
+        var bg = new ColorRect
+        {
+            Color = new Color(0, 0, 0, 0.75f),
+            AnchorRight = 1,
+            AnchorBottom = 1,
+        };
+        AddChild(bg);
+
+        var panel = new Panel
+        {
+            Size = new Vector2(760, 600),
+            Position = new Vector2(
+                (DisplayServer.WindowGetSize().X - 760) / 2,
+                (DisplayServer.WindowGetSize().Y - 600) / 2),
+        };
+        var style = new StyleBoxFlat();
+        style.BgColor = new Color(0.1f, 0.08f, 0.15f, 0.96f);
+        style.SetBorderWidthAll(2);
+        style.BorderColor = new Color(0.8f, 0.6f, 0.1f);
+        panel.AddThemeStyleboxOverride("panel", style);
+        AddChild(panel);
+
+        // Title
+        var title = new Label
+        {
+            Text = "\U0001f5f3 CLAIM REWARDS",
+            Position = new Vector2(20, 12),
+            Size = new Vector2(720, 36),
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        title.AddThemeColorOverride("font_color", new Color(0.95f, 0.8f, 0.2f));
+        title.AddThemeFontSizeOverride("font_size", 26);
+        panel.AddChild(title);
+
+        var subtitle = new Label
+        {
+            Text = string.Format("Gold pool: {0}g   |   Cards: {1}   Potions: {2}   Relics: {3}",
+                RewardPool.TotalGoldPooled, RewardPool.TotalCardsPooled,
+                RewardPool.TotalPotionsPooled, RewardPool.TotalRelicsPooled),
+            Position = new Vector2(20, 48),
+            Size = new Vector2(720, 22),
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        subtitle.AddThemeColorOverride("font_color", new Color(0.7f, 0.7f, 0.7f));
+        subtitle.AddThemeFontSizeOverride("font_size", 15);
+        panel.AddChild(subtitle);
+
+        // Scrollable list
+        var scroll = new ScrollContainer
+        {
+            Position = new Vector2(20, 78),
+            Size = new Vector2(720, 430),
+        };
+        panel.AddChild(scroll);
+
+        var list = new VBoxContainer();
+        list.AddThemeConstantOverride("separation", 8);
+        scroll.AddChild(list);
+
+        // --- Gold row with SpinBox ---
+        if (RewardPool.TotalGoldPooled > 0)
+        {
+            var goldRow = new HBoxContainer();
+            goldRow.AddThemeConstantOverride("separation", 10);
+
+            var goldLabel = new Label
+            {
+                Text = string.Format("Gold (from shared pool of {0}g):", RewardPool.TotalGoldPooled),
+                CustomMinimumSize = new Vector2(360, 32),
+            };
+            goldLabel.AddThemeColorOverride("font_color", new Color(0.95f, 0.85f, 0.3f));
+            goldLabel.AddThemeFontSizeOverride("font_size", 16);
+            goldRow.AddChild(goldLabel);
+
+            _goldSpin = new SpinBox
+            {
+                MinValue = 0,
+                MaxValue = RewardPool.TotalGoldPooled,
+                Step = 1,
+                Value = 0,
+                CustomMinimumSize = new Vector2(120, 32),
+            };
+            _goldSpin.AddThemeFontSizeOverride("font_size", 16);
+            goldRow.AddChild(_goldSpin);
+
+            var goldSuffix = new Label { Text = "g", CustomMinimumSize = new Vector2(20, 32) };
+            goldSuffix.AddThemeFontSizeOverride("font_size", 16);
+            goldRow.AddChild(goldSuffix);
+
+            list.AddChild(goldRow);
+
+            // Divider
+            var hs = new HSeparator();
+            list.AddChild(hs);
+        }
+
+        // --- Non-gold reward checkboxes ---
+        foreach (var entry in RewardPool.GetNonGoldPending())
+        {
+            var cb = new CheckBox
+            {
+                Text = entry.DisplayName,
+                CustomMinimumSize = new Vector2(0, 34),
+            };
+            cb.AddThemeColorOverride("font_color", new Color(0.9f, 0.9f, 0.9f));
+            cb.AddThemeFontSizeOverride("font_size", 17);
+            _claimBoxes[entry.Id] = cb;
+            list.AddChild(cb);
+        }
+
+        // --- Status label (hidden until submit) ---
+        _status = new Label
+        {
+            Text = "",
+            Position = new Vector2(20, 516),
+            Size = new Vector2(720, 24),
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        _status.AddThemeFontSizeOverride("font_size", 16);
+        panel.AddChild(_status);
+
+        // --- Submit button ---
+        _submitBtn = new Button
+        {
+            Text = "Submit Claims",
+            Position = new Vector2(230, 550),
+            Size = new Vector2(300, 38),
+        };
+        _submitBtn.Pressed += OnSubmit;
+        panel.AddChild(_submitBtn);
+
+        // Initialize local player ID
+        MultiplayerCoordinator.InitializeForRun();
+
+        MainFile.Logger.Info(string.Format("Democracy: ClaimPanel shown — {0} rewards, {1}g",
+            _claimBoxes.Count, RewardPool.TotalGoldPooled));
+    }
+
+    private void OnSubmit()
+    {
+        if (_submitted) return;
+        _submitted = true;
+
+        var claimedIds = new List<string>();
+        foreach (var kv in _claimBoxes)
+            if (kv.Value.ButtonPressed)
+                claimedIds.Add(kv.Key);
+
+        int goldAmount = _goldSpin != null ? (int)_goldSpin.Value : 0;
+
+        MainFile.Logger.Info(string.Format("Democracy: submitting claim — {0}g + {1} rewards",
+            goldAmount, claimedIds.Count));
+
+        MultiplayerCoordinator.SendClaim(goldAmount, claimedIds);
+        VoteManager.SubmitClaim(MultiplayerCoordinator.LocalPlayerId, goldAmount, claimedIds);
+
+        // Disable all inputs, show waiting state
+        _submitBtn.Disabled = true;
+        _goldSpin?.SetEditable(false);
+        foreach (var cb in _claimBoxes.Values) cb.Disabled = true;
+
+        _status.Text = "Waiting for other players to submit...";
+        _status.AddThemeColorOverride("font_color", new Color(0.5f, 0.8f, 1.0f));
     }
 
     public override void _Process(double delta)
     {
-        if (!_isVisible) return;
-        var remaining = VoteManager.GetRemainingTime();
-        if (remaining >= 0 && _timerLabel != null) _timerLabel.Text = $"Time: {remaining:F0}s";
-    }
+        _elapsed++;
 
-    public void ShowVote(string rewardId, string rewardName, int timeout)
-    {
-        _activeRewardId = rewardId;
-        _isVisible = true;
-        _votedPlayers.Clear();
-        if (_titleLabel != null) _titleLabel.Text = "🗳 DEMOCRACY VOTE";
-        if (_rewardNameLabel != null) _rewardNameLabel.Text = $"Reward: {rewardName}";
-        PopulatePlayerList();
-        Show();
-    }
-
-    public void HidePanel() { _isVisible = false; Hide(); }
-
-    private void PopulatePlayerList()
-    {
-        if (_playerList == null) return;
-        foreach (var child in _playerList.GetChildren()) child.QueueFree();
-        var players = MultiplayerCoordinator.GetPlayers();
-        var localId = MultiplayerCoordinator.LocalPlayerId;
-        foreach (var player in players)
+        if (_submitted && VoteManager.ResolutionDone)
         {
-            var name = _playerNames.GetValueOrDefault(player.NetId, $"Player {player.NetId}");
-            var isLocal = player.NetId == localId;
-            var hasVoted = _votedPlayers.Contains(player.NetId);
-            var text = isLocal ? $"{name} (you)" : name;
-            if (hasVoted) text += " ✓";
-            var btn = new Button { Text = text, Disabled = hasVoted, SizeFlagsHorizontal = SizeFlags.ExpandFill };
-            var capturedId = player.NetId;
-            btn.Pressed += () => OnPlayerClicked(capturedId);
-            _playerList.AddChild(btn);
+            _status.Text = "Distribution complete!";
+            _status.AddThemeColorOverride("font_color", new Color(0.4f, 1.0f, 0.4f));
+            // Auto-close after a couple seconds
+            if (_elapsed > 180)
+                QueueFree();
+            return;
         }
-    }
 
-    private void OnPlayerClicked(ulong targetId)
-    {
-        if (!_votedPlayers.Contains(MultiplayerCoordinator.LocalPlayerId))
+        // Timeout
+        if (_elapsed % 60 == 0)
         {
-            MultiplayerCoordinator.SendVote(_activeRewardId, targetId);
-            _votedPlayers.Add(MultiplayerCoordinator.LocalPlayerId);
-            PopulatePlayerList();
+            var remaining = _timeout - _elapsed / 60;
+            if (remaining <= 0)
+            {
+                MainFile.Logger.Info("Democracy: claim timeout — auto-distributing.");
+                if (!_submitted) OnSubmit();
+                else if (!VoteManager.ResolutionDone)
+                {
+                    // force resolve
+                    RewardPool.DistributeEvenly();
+                    QueueFree();
+                }
+            }
         }
     }
 }
