@@ -46,10 +46,11 @@ public static class VoteManager
         if (seen < 1) return;
         if (submitted < seen) return;
 
-        ResolveClaims();
+        _ = ResolveClaimsAsync();
     }
 
-    private static void ResolveClaims()
+
+    private static async Task ResolveClaimsAsync()
     {
         if (_resolutionDone) return;
         _resolutionDone = true;
@@ -60,8 +61,6 @@ public static class VoteManager
         MainFile.Logger.Info(string.Format("Democracy: RESOLVING CLAIMS — {0} players", playerIds.Count));
 
         // --- Gold distribution ---
-        // Gold was already granted to each source player during auto-pick. Reclaim
-        // it first so the whole pool is redistributed from scratch per the vote.
         var goldEntries = RewardPool.GetPending().Where(e => e.Type == RewardPool.PoolEntry.RewardType.GoldPile).ToList();
         var autoGold = new Dictionary<ulong, int>();
         foreach (var g in goldEntries)
@@ -87,14 +86,11 @@ public static class VoteManager
                 int grant;
                 if (totalClaimedGold <= totalGold)
                 {
-                    // Give everyone what they asked for; split any leftover (or the
-                    // whole pool, if nobody claimed) evenly, remainder to first N.
                     int leftover = totalGold - totalClaimedGold;
                     grant = claimed + leftover / playerIds.Count + (i < leftover % playerIds.Count ? 1 : 0);
                 }
                 else
                 {
-                    // Over-claimed: scale proportionally.
                     grant = totalClaimedGold > 0 ? (int)((long)claimed * totalGold / totalClaimedGold) : 0;
                 }
 
@@ -104,6 +100,10 @@ public static class VoteManager
         }
 
         // --- Non-gold rewards: grant to the winner (or discard) ---
+        // Disable grant capture during transfers — the synced transfer/discard
+        // commands move cards/potions/relics and would otherwise be mistaken for
+        // fresh reward grants (polluting the pending-grant queue).
+        RewardPool.IsRewardPhaseActive = false;
         var nonGold = RewardPool.GetNonGoldPending();
         foreach (var entry in nonGold)
         {
@@ -118,64 +118,89 @@ public static class VoteManager
                 var winner = claimants[0];
                 if (winner == entry.SourcePlayerId)
                 {
-                    // Already granted to the source during auto-pick — keep it.
+                    // Diagnostic: verify the "already owned" reward is actually in the winner's inventory.
+                    if (entry.Type == RewardPool.PoolEntry.RewardType.CardReward && entry.Card != null)
+                    {
+                        var w = CombatRewardPatch.GetPlayer(winner);
+                        bool inDeck = w?.Deck?.Cards?.Any(c => ReferenceEquals(c, entry.Card)) ?? false;
+                        MainFile.Logger.Info(string.Format(
+                            "Democracy: OWN-CHECK {0} inWinnerDeck={1} cardOwner={2} winnerId={3}",
+                            entry.DisplayName, inDeck, entry.Card.Owner?.NetId ?? 0, winner));
+                    }
                     RewardPool.MarkDistributed(entry.Id, winner);
                     MainFile.Logger.Info(string.Format("Democracy: {0} -> P{1} (uncontested, already owned)", entry.DisplayName, winner));
                 }
                 else
                 {
-                    RewardPool.TransferReward(entry, winner);
+                    await RewardPool.TransferReward(entry, winner);
                     RewardPool.MarkDistributed(entry.Id, winner);
                     MainFile.Logger.Info(string.Format("Democracy: {0} -> P{1} (uncontested, transferred)", entry.DisplayName, winner));
                 }
             }
             else if (claimants.Count > 1)
             {
-                var winner = TieBreak(claimants);
+                var winner = TieBreak(entry.Id, claimants);
                 if (winner == entry.SourcePlayerId)
                 {
                     RewardPool.MarkDistributed(entry.Id, winner);
                 }
                 else
                 {
-                    RewardPool.TransferReward(entry, winner);
+                    await RewardPool.TransferReward(entry, winner);
                     RewardPool.MarkDistributed(entry.Id, winner);
                 }
                 MainFile.Logger.Info(string.Format("Democracy: {0} -> P{1} ({2} claimants, tie-broken)", entry.DisplayName, winner, claimants.Count));
             }
             else
             {
-                // Unclaimed: discard.
-                RewardPool.DiscardReward(entry);
+                await RewardPool.DiscardReward(entry);
                 RewardPool.MarkDiscarded(entry.Id);
                 MainFile.Logger.Info(string.Format("Democracy: {0} unclaimed — discarded.", entry.DisplayName));
             }
         }
 
-        // Gold pool entries: mark resolved (gold was already granted above).
         foreach (var entry in RewardPool.GetPending())
             if (entry.Type == RewardPool.PoolEntry.RewardType.GoldPile)
                 RewardPool.MarkDiscarded(entry.Id);
 
         MainFile.Logger.Info("Democracy: distribution complete.");
+        CombatRewardPatch.RefreshDeckCount();
         MultiplayerCoordinator.SendPoolDistributed();
     }
 
-    private static ulong TieBreak(List<ulong> candidates)
+
+    private static ulong TieBreak(string rewardId, List<ulong> candidates)
     {
         if (candidates.Count == 1) return candidates[0];
+        // DETERMINISTIC tie-break. Random.Shared is per-process (each machine has its
+        // own seed), so it flipped ties in opposite directions on the two machines and
+        // desynced the deterministic simulation. Sort the candidates and roll from a
+        // stable hash of the reward id + candidate ids instead.
+        var sorted = candidates.OrderBy(id => id).ToList();
         // Fairness: players with fewer wins get a bonus weight
         var fairness = DemocracyConfig.TieBreakFairness;
         var wc = new Dictionary<ulong, int>();
-        foreach (var c in candidates)
+        foreach (var c in sorted)
             wc[c] = RewardPool.PlayerWinCount.GetValueOrDefault(c, 0);
         var maxW = wc.Values.Max();
-        var weights = candidates.Select(c => 1.0 + fairness * (maxW - wc[c])).ToList();
+        var weights = sorted.Select(c => 1.0 + fairness * (maxW - wc[c])).ToList();
         var total = weights.Sum();
-        var roll = Random.Shared.NextDouble() * total;
+        var roll = DeterministicRoll(rewardId, sorted) * total;
         var cum = 0.0;
-        for (var i = 0; i < candidates.Count; i++) { cum += weights[i]; if (roll <= cum) return candidates[i]; }
-        return candidates[^1];
+        for (var i = 0; i < sorted.Count; i++) { cum += weights[i]; if (roll <= cum) return sorted[i]; }
+        return sorted[^1];
+    }
+
+    private static double DeterministicRoll(string rewardId, List<ulong> sorted)
+    {
+        // FNV-1a over the reward id + each candidate NetId, normalized to [0,1).
+        uint h = 2166136261u;
+        foreach (var ch in rewardId)
+            h = (h ^ (uint)ch) * 16777619u;
+        foreach (var id in sorted)
+            for (var k = 0; k < 8; k++)
+                h = (h ^ (byte)(id >> (8 * k))) * 16777619u;
+        return (h & 0xFFFFFFu) / 16777216.0;
     }
 
     public static void Reset()

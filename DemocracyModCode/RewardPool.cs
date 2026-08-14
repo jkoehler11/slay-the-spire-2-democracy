@@ -1,7 +1,9 @@
 using BaseLib.Utils;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Commands;
 using DemocracyMod.DemocracyModCode.Networking;
 using DemocracyMod.DemocracyModCode.Patches;
 
@@ -14,7 +16,8 @@ public static class RewardPool
     public class PoolEntry
     {
         public enum RewardType { CardReward, GoldPile, Potion, Relic, BossRelic }
-        public string Id { get; } = Guid.NewGuid().ToString("N")[..8];
+        /// <summary>Deterministic id (identical on every machine) so claims match across the network.</summary>
+        public string Id { get; init; } = "";
         public RewardType Type { get; init; }
         public ulong SourcePlayerId { get; init; }
         public ulong? WinnerPlayerId { get; set; }
@@ -45,8 +48,10 @@ public static class RewardPool
     private static int _totalPotionsPooled;
     private static int _totalRelicsPooled;
 
-    // Actual granted objects captured from HandleRewardObtainedMessage, matched up
-    // with the following AfterRewardTaken (same reward, fires right after).
+    // Per-source-player sequence counter for deterministic, cross-machine-stable entry ids.
+    private static readonly Dictionary<ulong, int> PoolSeq = new();
+
+    // Captured granted objects, paired with the following AfterRewardTaken (same reward).
     private sealed class PendingGrant
     {
         public ulong PlayerId = 0;
@@ -55,6 +60,9 @@ public static class RewardPool
     }
     private static readonly List<PendingGrant> PendingGrants = new();
     private static readonly object GrantLock = new();
+
+    /// <summary>Only capture reward grants during the reward phase (not run-start or combat).</summary>
+    public static volatile bool IsRewardPhaseActive;
 
     public static int TotalGoldPooled => _totalGoldPooled;
     public static int TotalCardsPooled => _totalCardsPooled;
@@ -96,7 +104,14 @@ public static class RewardPool
         }
     }
 
-    // ---- Pending-grant capture (called from CombatRewardPatch's HandleRewardObtainedMessage hook) ----
+    private static string NextId(ulong sourceId, PoolEntry.RewardType type)
+    {
+        int n = PoolSeq.GetValueOrDefault(sourceId, 0);
+        PoolSeq[sourceId] = n + 1;
+        return string.Format("{0}:{1}:{2}", sourceId, type, n);
+    }
+
+    // ---- Pending-grant capture (from the synced grant commands) ----
     public static void NoteGrantedCard(ulong playerId, CardModel card)
     { lock (GrantLock) PendingGrants.Add(new PendingGrant { PlayerId = playerId, Type = PoolEntry.RewardType.CardReward, Model = card }); }
     public static void NoteGrantedRelic(ulong playerId, RelicModel relic)
@@ -117,26 +132,38 @@ public static class RewardPool
 
     public static void AddGoldReward(ulong sourceId, int amount)
     {
-        _totalGoldPooled += amount;
-        lock (LockObj) Entries.Add(new PoolEntry { Type = PoolEntry.RewardType.GoldPile, SourcePlayerId = sourceId, GoldAmount = amount });
+        lock (LockObj)
+        {
+            _totalGoldPooled += amount;
+            Entries.Add(new PoolEntry { Id = NextId(sourceId, PoolEntry.RewardType.GoldPile), Type = PoolEntry.RewardType.GoldPile, SourcePlayerId = sourceId, GoldAmount = amount });
+        }
     }
 
     public static void AddCardReward(ulong sourceId, int choiceCount, string? cardNames, CardModel? card = null)
     {
-        _totalCardsPooled++;
-        lock (LockObj) Entries.Add(new PoolEntry { Type = PoolEntry.RewardType.CardReward, SourcePlayerId = sourceId, CardChoiceCount = choiceCount, CardNames = cardNames, Card = card });
+        lock (LockObj)
+        {
+            _totalCardsPooled++;
+            Entries.Add(new PoolEntry { Id = NextId(sourceId, PoolEntry.RewardType.CardReward), Type = PoolEntry.RewardType.CardReward, SourcePlayerId = sourceId, CardChoiceCount = choiceCount, CardNames = cardNames, Card = card });
+        }
     }
 
     public static void AddPotionReward(ulong sourceId, string name, PotionModel? potion = null)
     {
-        _totalPotionsPooled++;
-        lock (LockObj) Entries.Add(new PoolEntry { Type = PoolEntry.RewardType.Potion, SourcePlayerId = sourceId, PotionName = name, Potion = potion });
+        lock (LockObj)
+        {
+            _totalPotionsPooled++;
+            Entries.Add(new PoolEntry { Id = NextId(sourceId, PoolEntry.RewardType.Potion), Type = PoolEntry.RewardType.Potion, SourcePlayerId = sourceId, PotionName = name, Potion = potion });
+        }
     }
 
     public static void AddRelicReward(ulong sourceId, string name, bool isBoss, RelicModel? relic = null)
     {
-        _totalRelicsPooled++;
-        lock (LockObj) Entries.Add(new PoolEntry { Type = isBoss ? PoolEntry.RewardType.BossRelic : PoolEntry.RewardType.Relic, SourcePlayerId = sourceId, RelicName = name, Relic = relic });
+        lock (LockObj)
+        {
+            _totalRelicsPooled++;
+            Entries.Add(new PoolEntry { Id = NextId(sourceId, isBoss ? PoolEntry.RewardType.BossRelic : PoolEntry.RewardType.Relic), Type = isBoss ? PoolEntry.RewardType.BossRelic : PoolEntry.RewardType.Relic, SourcePlayerId = sourceId, RelicName = name, Relic = relic });
+        }
     }
 
     // ---- Gold grant / reclaim ----
@@ -166,7 +193,7 @@ public static class RewardPool
     }
 
     // ---- Transfer / discard of the actual granted objects ----
-    public static void TransferReward(PoolEntry e, ulong winnerId)
+    public static async Task TransferReward(PoolEntry e, ulong winnerId)
     {
         var source = CombatRewardPatch.GetPlayer(e.SourcePlayerId);
         var winner = CombatRewardPatch.GetPlayer(winnerId);
@@ -180,24 +207,52 @@ public static class RewardPool
             switch (e.Type)
             {
                 case PoolEntry.RewardType.CardReward:
-                    if (e.Card == null) return;
-                    source.RunState.RemoveCard(e.Card);
-                    winner.RunState.AddCard(e.Card, winner);
+                    if (e.Card == null) { MainFile.Logger.Info(string.Format("Democracy: transfer {0} skipped — no captured card", e.DisplayName)); return; }
+                    {
+                        // ---- diagnostics ----
+                        string pileName = e.Card.Pile?.Type.ToString() ?? "NULL";
+                        ulong ownerId = e.Card.Owner?.NetId ?? 0;
+                        bool removed = e.Card.HasBeenRemovedFromState;
+                        int srcDeck = source.Deck?.Cards.Count ?? -1;
+                        int winDeck = winner.Deck?.Cards.Count ?? -1;
+                        MainFile.Logger.Info(string.Format(
+                            "Democracy: XFER-BEFORE card={0} owner={1} pile={2} removed={3} srcDeck={4} winDeck={5}",
+                            e.Card.Title, ownerId, pileName, removed, srcDeck, winDeck));
+                        MainFile.Logger.Info("Democracy:   SRC-DECK-BEFORE " + DeckTitles(source));
+                        MainFile.Logger.Info("Democracy:   WIN-DECK-BEFORE " + DeckTitles(winner));
+
+                        await CardPileCmd.GiveToAnotherPlayer(e.Card, winner, PileType.Deck, CardPilePosition.Bottom, null);
+
+                        MainFile.Logger.Info("Democracy:   SRC-DECK-AFTER " + DeckTitles(source));
+                        MainFile.Logger.Info("Democracy:   WIN-DECK-AFTER " + DeckTitles(winner));
+
+                        string pileName2 = e.Card.Pile?.Type.ToString() ?? "NULL";
+                        ulong ownerId2 = e.Card.Owner?.NetId ?? 0;
+                        int srcDeck2 = source.Deck?.Cards.Count ?? -1;
+                        int winDeck2 = winner.Deck?.Cards.Count ?? -1;
+                        MainFile.Logger.Info(string.Format(
+                            "Democracy: XFER-AFTER  card={0} owner={1} pile={2} srcDeck={3} winDeck={4}",
+                            e.Card.Title, ownerId2, pileName2, srcDeck2, winDeck2));
+                    }
                     break;
                 case PoolEntry.RewardType.Relic:
                 case PoolEntry.RewardType.BossRelic:
-                    if (e.Relic == null) return;
+                    if (e.Relic == null) { MainFile.Logger.Info(string.Format("Democracy: transfer {0} skipped — no captured relic", e.DisplayName)); return; }
                     var relic = source.Relics.FirstOrDefault(r => r.Id.Equals(e.Relic.Id));
-                    if (relic == null) return;
-                    source.RemoveRelicInternal(relic, true);
-                    winner.AddRelicInternal(relic, 0, true);
+                    if (relic == null) { MainFile.Logger.Info(string.Format("Democracy: transfer {0} skipped — relic not in source inventory", e.DisplayName)); return; }
+                    await RelicCmd.Remove(relic);
+                    var relicCanonical = ModelDb.AllRelics.FirstOrDefault(r => r.Id.Equals(e.Relic.Id));
+                    if (relicCanonical == null) { MainFile.Logger.Info(string.Format("Democracy: transfer {0} skipped — no canonical relic template", e.DisplayName)); return; }
+                    await RelicCmd.Obtain(relicCanonical.ToMutable(), winner, -1);
                     break;
                 case PoolEntry.RewardType.Potion:
-                    if (e.Potion == null) return;
+                    if (e.Potion == null) { MainFile.Logger.Info(string.Format("Democracy: transfer {0} skipped — no captured potion", e.DisplayName)); return; }
                     var potion = source.PotionSlots.FirstOrDefault(p => p != null && p.Id.Equals(e.Potion.Id));
-                    if (potion == null) return;
-                    source.RemovePotionInternal(potion);
-                    winner.AddPotionInternal(potion, -1, true);
+                    if (potion != null)
+                        await PotionCmd.Discard(potion);
+                    var potionCanonical = ModelDb.AllPotions.FirstOrDefault(p => p.Id.Equals(e.Potion.Id));
+                    if (potionCanonical == null) { MainFile.Logger.Info(string.Format("Democracy: transfer {0} skipped — no canonical potion template", e.DisplayName)); return; }
+                    await PotionCmd.TryToProcure(potionCanonical.ToMutable(), winner, -1);
                     break;
             }
             MainFile.Logger.Info(string.Format("Democracy: transferred {0} P{1} -> P{2}", e.DisplayName, e.SourcePlayerId, winnerId));
@@ -208,7 +263,8 @@ public static class RewardPool
         }
     }
 
-    public static void DiscardReward(PoolEntry e)
+
+    public static async Task DiscardReward(PoolEntry e)
     {
         var source = CombatRewardPatch.GetPlayer(e.SourcePlayerId);
         if (source == null) return;
@@ -217,21 +273,21 @@ public static class RewardPool
             switch (e.Type)
             {
                 case PoolEntry.RewardType.CardReward:
-                    if (e.Card != null) source.RunState.RemoveCard(e.Card);
+                    if (e.Card != null) await CardPileCmd.RemoveFromDeck(e.Card, false);
                     break;
                 case PoolEntry.RewardType.Relic:
                 case PoolEntry.RewardType.BossRelic:
                     if (e.Relic != null)
                     {
                         var relic = source.Relics.FirstOrDefault(r => r.Id.Equals(e.Relic.Id));
-                        if (relic != null) source.RemoveRelicInternal(relic, true);
+                        if (relic != null) await RelicCmd.Remove(relic);
                     }
                     break;
                 case PoolEntry.RewardType.Potion:
                     if (e.Potion != null)
                     {
                         var potion = source.PotionSlots.FirstOrDefault(p => p != null && p.Id.Equals(e.Potion.Id));
-                        if (potion != null) source.RemovePotionInternal(potion);
+                        if (potion != null) await PotionCmd.Discard(potion);
                     }
                     break;
             }
@@ -242,6 +298,7 @@ public static class RewardPool
             MainFile.Logger.Info(string.Format("Democracy: discard {0} error: {1}", e.DisplayName, ex.Message));
         }
     }
+
 
     public static void DistributeEvenly()
     {
@@ -264,8 +321,21 @@ public static class RewardPool
 
     public static void Clear()
     {
-        lock (LockObj) { Entries.Clear(); _totalGoldPooled = 0; _totalCardsPooled = 0; _totalPotionsPooled = 0; _totalRelicsPooled = 0; }
+        lock (LockObj) { Entries.Clear(); _totalGoldPooled = 0; _totalCardsPooled = 0; _totalPotionsPooled = 0; _totalRelicsPooled = 0; PoolSeq.Clear(); }
         lock (GrantLock) PendingGrants.Clear();
+        IsRewardPhaseActive = false;
+    }
+
+
+    private static string DeckTitles(Player p)
+    {
+        try
+        {
+            var d = p?.Deck;
+            if (d == null || d.Cards == null) return "NODECK";
+            return string.Join(", ", d.Cards.Select(c => c.Title));
+        }
+        catch { return "ERR"; }
     }
 
     internal static void RegisterSpireFields() { }

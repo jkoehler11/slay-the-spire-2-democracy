@@ -4,6 +4,8 @@ using System.Linq;
 using DemocracyMod.DemocracyModCode;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Rewards;
+using MegaCrit.Sts2.Core.Rooms;
+using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Nodes.Screens;
 using MegaCrit.Sts2.Core.Nodes.Screens.CardSelection;
 
@@ -46,12 +48,21 @@ public static class AutoPickPatch
         static void Postfix(RewardsSetSynchronizer __instance, RewardsSet set)
         {
             if (!CombatRewardPatch.IsDemocracyActive) return;
+            // Grant-capture gate: set on EVERY reward set so both machines capture the
+            // granted models deterministically. (set.Room is host-local and unreliable on
+            // the remote machine — reward POOLING is gated separately in AfterRewardTaken
+            // via runState.CurrentRoom, which IS synced.)
+            RewardPool.IsRewardPhaseActive = true;
             if (!DemocracyConfig.AutoPickRewards) return;
             if (__instance == null || set?.Rewards == null) return;
 
             var local = __instance.LocalPlayer;
             if (local == null || set.Player == null) return;
             if (set.Player.NetId != local.NetId) return;   // only the local player's set
+
+            // Only auto-pick the LOCAL player's COMBAT set (local set.Room is reliable).
+            // Ancients/events/shops/treasure stay vanilla — the user picks manually.
+            if (set.Room is not CombatRoom) return;
 
             var sync = __instance;
             var tree = Engine.GetMainLoop() as SceneTree;
@@ -133,6 +144,9 @@ public static class AutoPickPatch
             if (!CombatRewardPatch.IsDemocracyActive) return;
             if (!DemocracyConfig.AutoPickRewards) return;
             if (__instance == null) return;
+            // Only auto-select cards during COMBAT rewards. Non-combat card
+            // rewards (events, shops, ancients) must let the player choose.
+            if (RunManager.Instance?.State?.CurrentRoom is not CombatRoom) return;
 
             var tree = Engine.GetMainLoop() as SceneTree;
             if (tree == null) return;
