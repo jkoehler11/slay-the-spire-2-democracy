@@ -17,7 +17,6 @@ out/
 
 # Godot
 .godot/
-export_presets.cfg
 *.uid
 
 # NuGet
