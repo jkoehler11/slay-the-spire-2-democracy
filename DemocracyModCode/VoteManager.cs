@@ -87,8 +87,6 @@ public static class VoteManager
         var autoGold = new Dictionary<ulong, int>();
         foreach (var g in goldEntries)
             autoGold[g.SourcePlayerId] = autoGold.GetValueOrDefault(g.SourcePlayerId, 0) + g.GoldAmount;
-        foreach (var kv in autoGold)
-            RewardPool.RemoveGold(kv.Key, kv.Value);
 
         int totalGold = RewardPool.TotalGoldPooled;
         int totalClaimedGold = 0;
@@ -99,25 +97,39 @@ public static class VoteManager
 
         if (totalGold > 0)
         {
-            for (var i = 0; i < playerIds.Count; i++)
+            if (DemocracyConfig.RewardSelection == RewardSelectionMode.KeepOwnRewards && totalClaimedGold == 0)
             {
-                var pid = playerIds[i];
-                int claimed;
-                lock (LockObj) claimed = _claims.TryGetValue(pid, out var c) ? c.GoldAmount : 0;
+                // Default: nobody claimed gold, so each player keeps the exact amount they
+                // earned (already granted at auto-pick). No reclaim, no even split.
+                MainFile.LogVote(string.Format("Democracy: gold — keep own ({0}g, no claims).", totalGold));
+            }
+            else
+            {
+                // Reclaim every player's gold, then re-grant per claims (with an even
+                // split of any unclaimed leftover).
+                foreach (var kv in autoGold)
+                    RewardPool.RemoveGold(kv.Key, kv.Value);
 
-                int grant;
-                if (totalClaimedGold <= totalGold)
+                for (var i = 0; i < playerIds.Count; i++)
                 {
-                    int leftover = totalGold - totalClaimedGold;
-                    grant = claimed + leftover / playerIds.Count + (i < leftover % playerIds.Count ? 1 : 0);
-                }
-                else
-                {
-                    grant = totalClaimedGold > 0 ? (int)((long)claimed * totalGold / totalClaimedGold) : 0;
-                }
+                    var pid = playerIds[i];
+                    int claimed;
+                    lock (LockObj) claimed = _claims.TryGetValue(pid, out var c) ? c.GoldAmount : 0;
 
-                if (grant > 0)
-                    RewardPool.GrantGold(pid, grant);
+                    int grant;
+                    if (totalClaimedGold <= totalGold)
+                    {
+                        int leftover = totalGold - totalClaimedGold;
+                        grant = claimed + leftover / playerIds.Count + (i < leftover % playerIds.Count ? 1 : 0);
+                    }
+                    else
+                    {
+                        grant = totalClaimedGold > 0 ? (int)((long)claimed * totalGold / totalClaimedGold) : 0;
+                    }
+
+                    if (grant > 0)
+                        RewardPool.GrantGold(pid, grant);
+                }
             }
         }
 
@@ -175,9 +187,18 @@ public static class VoteManager
             }
             else
             {
-                await RewardPool.DiscardReward(entry);
-                RewardPool.MarkDiscarded(entry.Id);
-                MainFile.LogVote(string.Format("Democracy: {0} unclaimed — discarded.", entry.DisplayName));
+                if (DemocracyConfig.RewardSelection == RewardSelectionMode.KeepOwnRewards)
+                {
+                    // Default: unclaimed rewards stay with whoever earned them.
+                    RewardPool.MarkDistributed(entry.Id, entry.SourcePlayerId);
+                    MainFile.LogVote(string.Format("Democracy: {0} unclaimed — kept by P{1}.", entry.DisplayName, entry.SourcePlayerId));
+                }
+                else
+                {
+                    await RewardPool.DiscardReward(entry);
+                    RewardPool.MarkDiscarded(entry.Id);
+                    MainFile.LogVote(string.Format("Democracy: {0} unclaimed — discarded.", entry.DisplayName));
+                }
             }
         }
 

@@ -147,6 +147,9 @@ public static class AutoPickPatch
             // Only auto-select cards during COMBAT rewards. Non-combat card
             // rewards (events, shops, ancients) must let the player choose.
             if (RunManager.Instance?.State?.CurrentRoom is not CombatRoom) return;
+            // When keeping own rewards (default), let the player pick their own card
+            // instead of grabbing the first option — "what they would have gotten".
+            if (DemocracyConfig.RewardSelection != RewardSelectionMode.SelectAllRewards) return;
 
             var tree = Engine.GetMainLoop() as SceneTree;
             if (tree == null) return;

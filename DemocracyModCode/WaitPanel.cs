@@ -47,7 +47,7 @@ public partial class WaitPanel : CanvasLayer
 
         var title = new Label
         {
-            Text = "WAITING FOR PLAYERS",
+            Text = MainFile.Loc("DemocracyMod.WaitPanel.Title", "WAITING FOR PLAYERS"),
             HorizontalAlignment = HorizontalAlignment.Center,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
@@ -57,7 +57,7 @@ public partial class WaitPanel : CanvasLayer
 
         _dots = new Label
         {
-            Text = "Waiting for all players to finish selecting rewards",
+            Text = MainFile.Loc("DemocracyMod.WaitPanel.Subtitle", "Waiting for all players to finish selecting rewards"),
             HorizontalAlignment = HorizontalAlignment.Center,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
@@ -76,7 +76,7 @@ public partial class WaitPanel : CanvasLayer
         if (_ticks % 30 == 0)
         {
             var dots = (_ticks / 30) % 4;
-            _dots.Text = "Waiting for all players to finish selecting rewards"
+            _dots.Text = MainFile.Loc("DemocracyMod.WaitPanel.Subtitle", "Waiting for all players to finish selecting rewards")
                 + new string('.', dots);
         }
     }

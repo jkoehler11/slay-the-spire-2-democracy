@@ -32,12 +32,12 @@ public static class RewardPool
         public PotionModel? Potion { get; set; }
         public string DisplayName => Type switch
         {
-            RewardType.CardReward => Card?.Title ?? CardNames ?? string.Format("Card Reward ({0} choices)", CardChoiceCount),
-            RewardType.GoldPile => string.Format("{0} Gold", GoldAmount),
-            RewardType.Potion => PotionName ?? "Potion",
-            RewardType.Relic => RelicName ?? "Relic",
-            RewardType.BossRelic => string.Format("Boss Relic: {0}", RelicName ?? "Unknown"),
-            _ => "Unknown Reward",
+            RewardType.CardReward => Card?.Title ?? CardNames ?? string.Format(MainFile.Loc("DemocracyMod.Reward.CardReward", "Card Reward ({0} choices)"), CardChoiceCount),
+            RewardType.GoldPile => string.Format(MainFile.Loc("DemocracyMod.Reward.Gold", "{0} Gold"), GoldAmount),
+            RewardType.Potion => PotionName ?? MainFile.Loc("DemocracyMod.Reward.Potion", "Potion"),
+            RewardType.Relic => RelicName ?? MainFile.Loc("DemocracyMod.Reward.Relic", "Relic"),
+            RewardType.BossRelic => string.Format(MainFile.Loc("DemocracyMod.Reward.BossRelic", "Boss Relic: {0}"), RelicName ?? MainFile.Loc("DemocracyMod.Reward.Unknown", "Unknown")),
+            _ => MainFile.Loc("DemocracyMod.Reward.UnknownReward", "Unknown Reward"),
         };
     }
 

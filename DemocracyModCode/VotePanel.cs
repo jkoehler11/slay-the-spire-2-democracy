@@ -52,7 +52,8 @@ public partial class VotePanel : CanvasLayer
         // Title
         var title = new Label
         {
-            Text = "\U0001f5f3 CLAIM REWARDS" + (DemocracyConfig.OpenVoting ? " - VOTES PUBLIC" : ""),
+            Text = MainFile.Loc("DemocracyMod.VotePanel.Title", "\U0001f5f3 CLAIM REWARDS")
+                + (DemocracyConfig.OpenVoting ? MainFile.Loc("DemocracyMod.VotePanel.VotesPublic", " - VOTES PUBLIC") : ""),
             Position = new Vector2(20, 12),
             Size = new Vector2(720, 36),
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -63,7 +64,8 @@ public partial class VotePanel : CanvasLayer
 
         var subtitle = new Label
         {
-            Text = string.Format("Gold pool: {0}g   |   Cards: {1}   Potions: {2}   Relics: {3}",
+            Text = string.Format(
+                MainFile.Loc("DemocracyMod.VotePanel.Subtitle", "Gold pool: {0}g   |   Cards: {1}   Potions: {2}   Relics: {3}"),
                 RewardPool.TotalGoldPooled, RewardPool.TotalCardsPooled,
                 RewardPool.TotalPotionsPooled, RewardPool.TotalRelicsPooled),
             Position = new Vector2(20, 48),
@@ -94,7 +96,9 @@ public partial class VotePanel : CanvasLayer
 
             var goldLabel = new Label
             {
-                Text = string.Format("Gold (from shared pool of {0}g):", RewardPool.TotalGoldPooled),
+                Text = string.Format(
+                    MainFile.Loc("DemocracyMod.VotePanel.GoldLabel", "Gold (from shared pool of {0}g):"),
+                    RewardPool.TotalGoldPooled),
                 CustomMinimumSize = new Vector2(360, 32),
             };
             goldLabel.AddThemeColorOverride("font_color", new Color(0.95f, 0.85f, 0.3f));
@@ -106,13 +110,13 @@ public partial class VotePanel : CanvasLayer
                 MinValue = 0,
                 MaxValue = RewardPool.TotalGoldPooled,
                 Step = 1,
-                Value = DemocracyConfig.SelfishDefault ? RewardPool.TotalGoldPooled : 0,
+                Value = DemocracyConfig.RewardSelection == RewardSelectionMode.SelectAllRewards ? RewardPool.TotalGoldPooled : 0,
                 CustomMinimumSize = new Vector2(120, 32),
             };
             _goldSpin.AddThemeFontSizeOverride("font_size", 16);
             goldRow.AddChild(_goldSpin);
 
-            var goldSuffix = new Label { Text = "g", CustomMinimumSize = new Vector2(20, 32) };
+            var goldSuffix = new Label { Text = MainFile.Loc("DemocracyMod.VotePanel.GoldSuffix", "g"), CustomMinimumSize = new Vector2(20, 32) };
             goldSuffix.AddThemeFontSizeOverride("font_size", 16);
             goldRow.AddChild(goldSuffix);
 
@@ -129,7 +133,7 @@ public partial class VotePanel : CanvasLayer
             var cb = new CheckBox
             {
                 Text = entry.DisplayName,
-                ButtonPressed = DemocracyConfig.SelfishDefault,
+                ButtonPressed = DemocracyConfig.RewardSelection == RewardSelectionMode.SelectAllRewards,
                 CustomMinimumSize = new Vector2(0, 34),
             };
             cb.AddThemeColorOverride("font_color", new Color(0.9f, 0.9f, 0.9f));
@@ -152,7 +156,7 @@ public partial class VotePanel : CanvasLayer
         // --- Submit button ---
         _submitBtn = new Button
         {
-            Text = "Submit Claims",
+            Text = MainFile.Loc("DemocracyMod.VotePanel.Submit", "Submit Claims"),
             Position = new Vector2(230, 550),
             Size = new Vector2(300, 38),
         };
@@ -189,7 +193,7 @@ public partial class VotePanel : CanvasLayer
         _goldSpin?.SetEditable(false);
         foreach (var cb in _claimBoxes.Values) cb.Disabled = true;
 
-        _status.Text = "Waiting for other players to submit...";
+        _status.Text = MainFile.Loc("DemocracyMod.VotePanel.Waiting", "Waiting for other players to submit...");
         _status.AddThemeColorOverride("font_color", new Color(0.5f, 0.8f, 1.0f));
     }
 
@@ -199,7 +203,7 @@ public partial class VotePanel : CanvasLayer
 
         if (_submitted && VoteManager.ResolutionDone)
         {
-            _status.Text = "Distribution complete!";
+            _status.Text = MainFile.Loc("DemocracyMod.VotePanel.Done", "Distribution complete!");
             _status.AddThemeColorOverride("font_color", new Color(0.4f, 1.0f, 0.4f));
             // Auto-close after a couple seconds
             if (_elapsed > 180)

@@ -2,6 +2,7 @@ using System.Reflection;
 using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Modding;
+using MegaCrit.Sts2.Core.Localization;
 using BaseLib.Utils;
 using BaseLib.Abstracts;
 using BaseLib.Config;
@@ -24,12 +25,20 @@ public partial class MainFile : Node
     public static void LogShop(string msg) { if (DemocracyConfig.LogShopActivity) Logger.Info(msg); }
     public static void LogDebug(string msg) { if (DemocracyConfig.DebugLogging) Logger.Info(msg); }
 
+    /// <summary>Localized UI string from the mod's "ui" loc table, with an English
+    /// fallback so the UI still works even when the localization .pck isn't loaded.</summary>
+    public static string Loc(string key, string fallback) =>
+        LocString.GetIfExists("ui", key)?.GetRawText() ?? fallback;
+
     public static void Initialize()
     {
         Logger.Info("=== Democracy Mod v0.1.0 Initializing ===");
 
-        ModConfigRegistry.Register(ModId, new DemocracyConfig());
+        // Register the mod's in-game UI localization table (shipped in DemocracyMod.pck).
+        CustomLocTableManager.Register("ui");
 
+        ModConfigRegistry.Register(ModId, new DemocracyConfig());
+        
         Harmony harmony = new(ModId);
         harmony.PatchAll();
         var patched = harmony.GetPatchedMethods().ToList();

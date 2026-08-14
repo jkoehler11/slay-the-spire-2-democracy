@@ -23,8 +23,10 @@ simulation. Works with **2–4 players**.
    - Uncontested rewards go to their sole claimant.
    - Contested rewards are tie-broken deterministically, weighted toward players who've
      won fewer rewards so far.
-   - Unclaimed cards/potions/relics are discarded.
-   - Leftover gold is split evenly, with any remainder handed out round-robin.
+   - Unclaimed rewards resolve per the **Reward Selection** setting: **Keep Own Rewards**
+     (default) returns them to whoever earned them, **Select All Rewards** pre-checks
+     everything for a one-click grab, and **Select No Rewards** discards unclaimed rewards
+     and even-splits unclaimed gold.
 5. **Transfer** — Cards move via the game's own `CardPileCmd.GiveToAnotherPlayer`;
    potions and relics via discard-then-procure with `PotionCmd`/`RelicCmd`. Because STS2
    multiplayer is a deterministic simulation, both machines run the same commands against
@@ -42,27 +44,48 @@ simulation. Works with **2–4 players**.
 dotnet build -c Debug -p:Sts2Path="/path/to/Slay the Spire 2"
 ```
 
-`has_pck` is `false`, so a plain build is enough — the `.dll`/`.pdb`/`.json` are copied
-into `<Sts2Path>/mods/DemocracyMod/` automatically. No `publish` step needed. Enable the
-mod in Settings → Mod Settings.
+Code-only changes need just `dotnet build` — the `.dll`/`.pdb`/`.json` are copied into
+`<Sts2Path>/mods/DemocracyMod/` automatically. Asset changes (localization) need `dotnet
+publish`, which additionally packs `DemocracyMod/localization/**` into `DemocracyMod.pck`
+via MegaDot. Set `<GodotPath>` in `Directory.Build.props` to your MegaDot editor binary
+first (matching the game's engine version — see "Localization"). Enable the mod in
+Settings → Mod Settings.
 
 ## Configuration
 
 Editable in-game via BaseLib `SimpleModConfig`:
 
-| Setting              | Default | Description                                              |
-|----------------------|---------|----------------------------------------------------------|
-| Auto-Pick Rewards    | ON      | Auto-select combat rewards so flow skips to the claim UI |
-| Vote Timeout         | 45s     | Auto-submit + resolve if someone never claims            |
-| Tie-Break Fairness   | 0.10    | Weight bonus for players who've won fewer rewards        |
-| Selfish Default      | ON      | Pre-check all rewards + full gold in the claim panel     |
-| Open Voting          | OFF     | Reveal each player's full claim (OFF = private)          |
-| Dead Can Vote        | ON      | Dead players may still claim rewards                     |
-| Shop Democracy       | ON      | *(declared, not yet implemented — see below)*            |
-| Shop Redistribute    | ON      | *(declared, not yet implemented — see below)*            |
+| Setting              | Default | Description                                                       |
+|----------------------|---------|-------------------------------------------------------------------|
+| Auto-Pick Rewards    | OFF     | Auto-select combat rewards so flow skips to the claim UI          |
+| Reward Selection     | Keep Own Rewards | Dropdown: Keep Own (default) / Select All / Select No Rewards     |
+| Vote Timeout         | 45s     | Auto-submit + resolve if someone never claims                     |
+| Tie-Break Fairness   | 0.10    | Weight bonus for players who've won fewer rewards                 |
+| Open Voting          | ON      | Reveal each player's full claim (OFF = private)                   |
+| Dead Can Vote        | ON      | Dead players may still claim rewards                              |
+| Shop Democracy       | OFF     | *(declared, not yet implemented — see below)*                     |
+| Shop Redistribute    | OFF     | *(declared, not yet implemented — see below)*                     |
 
 Logging toggles: **Log All Rewards**, **Log All Votes**, **Log Shop Activity** (all ON),
 and **Debug Logging** (OFF — enables the verbose DECKVIEW/XFER/OWN-CHECK diagnostics).
+
+## Localization
+
+All user-facing text — the in-game claim/wait panels and every Mod Settings label
+(including the dropdown option names) — is localizable, and English is the fallback if a
+key is missing. Strings live in `DemocracyMod/localization/<lang>/` as flat JSON, packed
+into `DemocracyMod.pck` at publish time:
+
+- `settings_ui.json` — Mod Settings labels + dropdown option labels. Keys are
+  `DEMOCRACYMOD-<PROPERTY_NAME>.title` and `DEMOCRACYMOD-REWARD_SELECTION.<EnumValue>`
+  (BaseLib looks these up automatically via the mod prefix + slugified property name).
+- `ui.json` — in-game panel text, looked up by the mod as `LocString("ui", key)`. The
+  `MainFile.Loc(key, fallback)` helper wraps this so missing keys degrade gracefully.
+
+To add a language: copy `eng/` to a new ISO 639-2 code (e.g. `deu/`, `jpn/`), translate
+the values, and republish. The game loads `res://DemocracyMod/localization/<lang>/<table>.json`
+automatically; `.pck` compatibility requires the MegaDot editor version to match the game's
+engine (currently `4.5.1.m.14` — check the game binary's `--version` after an update).
 
 ## Architecture
 
@@ -113,13 +136,13 @@ slay-the-spire-2-democracy/
             DemocracyMessages.cs       - ICustomMessage types
             MultiplayerCoordinator.cs  - Claim/pool-distributed send + receive
     DemocracyMod.csproj
-    DemocracyMod.json                  - Mod manifest (has_pck: false)
+    DemocracyMod.json                  - Mod manifest (has_pck: true)
     Directory.Build.props / Sts2PathDiscovery.props
     DESIGN.md                          - Game design document
 ```
 
-The `DemocracyMod/scenes/` and `DemocracyMod/localization/` directories are leftover
-template assets and are unused (`has_pck: false` — the UI is built in code).
+`DemocracyMod/localization/` holds the mod's localizable strings (see "Localization"
+below); `DemocracyMod/scenes/` is an unused template leftover.
 
 ## Known Gaps
 
