@@ -11,7 +11,6 @@ public class DemocracyConfig : SimpleModConfig
 {
     [ConfigSection("Gameplay")]
     [ConfigSlider(0, 120)] public static int VoteTimeoutSeconds { get; set; } = 45;
-    [ConfigSlider(0, 60)] public static int NegotiationTimeoutSeconds { get; set; } = 30;
     public static bool ShopDemocracy { get; set; } = true;
     public static bool AutoPickRewards { get; set; } = true;
     public static bool ShopRedistribute { get; set; } = true;

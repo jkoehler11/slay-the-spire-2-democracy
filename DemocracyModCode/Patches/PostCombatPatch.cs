@@ -146,7 +146,7 @@ public static class PostCombatPatch
         if (_votePanel != null && GodotObject.IsInstanceValid(_votePanel)) return;
 
         int seen = CombatRewardPatch.GetSeenPlayerCount();
-        MainFile.Logger.Info(string.Format(
+        MainFile.LogVote(string.Format(
             "Democracy: CLAIM TIME! {0} players, pool: {1}g/{2}c/{3}p/{4}r",
             seen, RewardPool.TotalGoldPooled, RewardPool.TotalCardsPooled,
             RewardPool.TotalPotionsPooled, RewardPool.TotalRelicsPooled));

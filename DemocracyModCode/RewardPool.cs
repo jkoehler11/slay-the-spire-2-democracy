@@ -172,12 +172,12 @@ public static class RewardPool
         var player = CombatRewardPatch.GetPlayer(playerId);
         if (player == null)
         {
-            MainFile.Logger.Info(string.Format("Democracy: grant gold failed — no cached player P{0}", playerId));
+            MainFile.LogVote(string.Format("Democracy: grant gold failed — no cached player P{0}", playerId));
             return false;
         }
         var current = Traverse.Create(player).Property<int>("Gold").Value;
         Traverse.Create(player).Property<int>("Gold").Value = current + amount;
-        MainFile.Logger.Info(string.Format("Democracy: Granted {0}g to P{1} (now {2}g)", amount, playerId, current + amount));
+        MainFile.LogVote(string.Format("Democracy: Granted {0}g to P{1} (now {2}g)", amount, playerId, current + amount));
         return true;
     }
 
@@ -188,7 +188,7 @@ public static class RewardPool
         var current = Traverse.Create(player).Property<int>("Gold").Value;
         var next = Math.Max(0, current - amount);
         Traverse.Create(player).Property<int>("Gold").Value = next;
-        MainFile.Logger.Info(string.Format("Democracy: Reclaimed {0}g from P{1} (now {2}g)", amount, playerId, next));
+        MainFile.LogVote(string.Format("Democracy: Reclaimed {0}g from P{1} (now {2}g)", amount, playerId, next));
         return true;
     }
 
@@ -199,7 +199,7 @@ public static class RewardPool
         var winner = CombatRewardPatch.GetPlayer(winnerId);
         if (source == null || winner == null)
         {
-            MainFile.Logger.Info(string.Format("Democracy: transfer {0} skipped — missing P{1} or P{2}", e.DisplayName, e.SourcePlayerId, winnerId));
+            MainFile.LogDebug(string.Format("Democracy: transfer {0} skipped — missing P{1} or P{2}", e.DisplayName, e.SourcePlayerId, winnerId));
             return;
         }
         try
@@ -207,7 +207,7 @@ public static class RewardPool
             switch (e.Type)
             {
                 case PoolEntry.RewardType.CardReward:
-                    if (e.Card == null) { MainFile.Logger.Info(string.Format("Democracy: transfer {0} skipped — no captured card", e.DisplayName)); return; }
+                    if (e.Card == null) { MainFile.LogDebug(string.Format("Democracy: transfer {0} skipped — no captured card", e.DisplayName)); return; }
                     {
                         // ---- diagnostics ----
                         string pileName = e.Card.Pile?.Type.ToString() ?? "NULL";
@@ -215,51 +215,51 @@ public static class RewardPool
                         bool removed = e.Card.HasBeenRemovedFromState;
                         int srcDeck = source.Deck?.Cards.Count ?? -1;
                         int winDeck = winner.Deck?.Cards.Count ?? -1;
-                        MainFile.Logger.Info(string.Format(
+                        MainFile.LogDebug(string.Format(
                             "Democracy: XFER-BEFORE card={0} owner={1} pile={2} removed={3} srcDeck={4} winDeck={5}",
                             e.Card.Title, ownerId, pileName, removed, srcDeck, winDeck));
-                        MainFile.Logger.Info("Democracy:   SRC-DECK-BEFORE " + DeckTitles(source));
-                        MainFile.Logger.Info("Democracy:   WIN-DECK-BEFORE " + DeckTitles(winner));
+                        MainFile.LogDebug("Democracy:   SRC-DECK-BEFORE " + DeckTitles(source));
+                        MainFile.LogDebug("Democracy:   WIN-DECK-BEFORE " + DeckTitles(winner));
 
                         await CardPileCmd.GiveToAnotherPlayer(e.Card, winner, PileType.Deck, CardPilePosition.Bottom, null);
 
-                        MainFile.Logger.Info("Democracy:   SRC-DECK-AFTER " + DeckTitles(source));
-                        MainFile.Logger.Info("Democracy:   WIN-DECK-AFTER " + DeckTitles(winner));
+                        MainFile.LogDebug("Democracy:   SRC-DECK-AFTER " + DeckTitles(source));
+                        MainFile.LogDebug("Democracy:   WIN-DECK-AFTER " + DeckTitles(winner));
 
                         string pileName2 = e.Card.Pile?.Type.ToString() ?? "NULL";
                         ulong ownerId2 = e.Card.Owner?.NetId ?? 0;
                         int srcDeck2 = source.Deck?.Cards.Count ?? -1;
                         int winDeck2 = winner.Deck?.Cards.Count ?? -1;
-                        MainFile.Logger.Info(string.Format(
+                        MainFile.LogDebug(string.Format(
                             "Democracy: XFER-AFTER  card={0} owner={1} pile={2} srcDeck={3} winDeck={4}",
                             e.Card.Title, ownerId2, pileName2, srcDeck2, winDeck2));
                     }
                     break;
                 case PoolEntry.RewardType.Relic:
                 case PoolEntry.RewardType.BossRelic:
-                    if (e.Relic == null) { MainFile.Logger.Info(string.Format("Democracy: transfer {0} skipped — no captured relic", e.DisplayName)); return; }
+                    if (e.Relic == null) { MainFile.LogDebug(string.Format("Democracy: transfer {0} skipped — no captured relic", e.DisplayName)); return; }
                     var relic = source.Relics.FirstOrDefault(r => r.Id.Equals(e.Relic.Id));
-                    if (relic == null) { MainFile.Logger.Info(string.Format("Democracy: transfer {0} skipped — relic not in source inventory", e.DisplayName)); return; }
+                    if (relic == null) { MainFile.LogDebug(string.Format("Democracy: transfer {0} skipped — relic not in source inventory", e.DisplayName)); return; }
                     await RelicCmd.Remove(relic);
                     var relicCanonical = ModelDb.AllRelics.FirstOrDefault(r => r.Id.Equals(e.Relic.Id));
-                    if (relicCanonical == null) { MainFile.Logger.Info(string.Format("Democracy: transfer {0} skipped — no canonical relic template", e.DisplayName)); return; }
+                    if (relicCanonical == null) { MainFile.LogDebug(string.Format("Democracy: transfer {0} skipped — no canonical relic template", e.DisplayName)); return; }
                     await RelicCmd.Obtain(relicCanonical.ToMutable(), winner, -1);
                     break;
                 case PoolEntry.RewardType.Potion:
-                    if (e.Potion == null) { MainFile.Logger.Info(string.Format("Democracy: transfer {0} skipped — no captured potion", e.DisplayName)); return; }
+                    if (e.Potion == null) { MainFile.LogDebug(string.Format("Democracy: transfer {0} skipped — no captured potion", e.DisplayName)); return; }
                     var potion = source.PotionSlots.FirstOrDefault(p => p != null && p.Id.Equals(e.Potion.Id));
                     if (potion != null)
                         await PotionCmd.Discard(potion);
                     var potionCanonical = ModelDb.AllPotions.FirstOrDefault(p => p.Id.Equals(e.Potion.Id));
-                    if (potionCanonical == null) { MainFile.Logger.Info(string.Format("Democracy: transfer {0} skipped — no canonical potion template", e.DisplayName)); return; }
+                    if (potionCanonical == null) { MainFile.LogDebug(string.Format("Democracy: transfer {0} skipped — no canonical potion template", e.DisplayName)); return; }
                     await PotionCmd.TryToProcure(potionCanonical.ToMutable(), winner, -1);
                     break;
             }
-            MainFile.Logger.Info(string.Format("Democracy: transferred {0} P{1} -> P{2}", e.DisplayName, e.SourcePlayerId, winnerId));
+            MainFile.LogVote(string.Format("Democracy: transferred {0} P{1} -> P{2}", e.DisplayName, e.SourcePlayerId, winnerId));
         }
         catch (Exception ex)
         {
-            MainFile.Logger.Info(string.Format("Democracy: transfer {0} error: {1}", e.DisplayName, ex.Message));
+            MainFile.LogDebug(string.Format("Democracy: transfer {0} error: {1}", e.DisplayName, ex.Message));
         }
     }
 
@@ -291,11 +291,11 @@ public static class RewardPool
                     }
                     break;
             }
-            MainFile.Logger.Info(string.Format("Democracy: discarded {0}", e.DisplayName));
+            MainFile.LogVote(string.Format("Democracy: discarded {0}", e.DisplayName));
         }
         catch (Exception ex)
         {
-            MainFile.Logger.Info(string.Format("Democracy: discard {0} error: {1}", e.DisplayName, ex.Message));
+            MainFile.LogDebug(string.Format("Democracy: discard {0} error: {1}", e.DisplayName, ex.Message));
         }
     }
 
@@ -313,7 +313,7 @@ public static class RewardPool
             MarkDistributed(entry.Id, winner);
             if (entry.Type == PoolEntry.RewardType.GoldPile)
                 GrantGold(winner, entry.GoldAmount);
-            MainFile.Logger.Info(string.Format("Democracy: Distributed {0} from P{1} -> P{2}",
+            MainFile.LogVote(string.Format("Democracy: Distributed {0} from P{1} -> P{2}",
                 entry.DisplayName, entry.SourcePlayerId, winner));
             playerIndex++;
         }

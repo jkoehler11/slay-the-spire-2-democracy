@@ -12,7 +12,6 @@ namespace DemocracyMod.DemocracyModCode.Networking;
 
 public static class MultiplayerCoordinator
 {
-    public static bool IsHost { get; private set; }
     public static ulong LocalPlayerId { get; private set; }
 
     public static void Send<T>(T msg) where T : ICustomMessage

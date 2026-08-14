@@ -87,14 +87,14 @@ public static class AutoPickPatch
                 if (reward == null || reward.SuccessfullySelected) continue;
                 try
                 {
-                    MainFile.Logger.Info(string.Format("Democracy: auto-picking {0}", reward.GetType().Name));
+                    MainFile.LogReward(string.Format("Democracy: auto-picking {0}", reward.GetType().Name));
                     var ok = await sync.SelectLocalReward(reward);
                     if (!ok)
-                        MainFile.Logger.Info(string.Format("Democracy: auto-pick returned false for {0}", reward.GetType().Name));
+                        MainFile.LogReward(string.Format("Democracy: auto-pick returned false for {0}", reward.GetType().Name));
                 }
                 catch (Exception e)
                 {
-                    MainFile.Logger.Info(string.Format("Democracy: auto-pick failed for {0}: {1}",
+                    MainFile.LogReward(string.Format("Democracy: auto-pick failed for {0}: {1}",
                         reward.GetType().Name, e.Message));
                 }
             }
@@ -105,7 +105,7 @@ public static class AutoPickPatch
         }
         catch (Exception e)
         {
-            MainFile.Logger.Info(string.Format("Democracy: auto-pick error: {0}", e.Message));
+            MainFile.LogReward(string.Format("Democracy: auto-pick error: {0}", e.Message));
         }
     }
 
@@ -127,11 +127,11 @@ public static class AutoPickPatch
         {
             if (screen._rewardButtons != null) screen._rewardButtons.Clear();
             screen.UpdateScreenState();
-            MainFile.Logger.Info("Democracy: completed vanilla reward screen (proceed button enabled).");
+            MainFile.LogReward("Democracy: completed vanilla reward screen (proceed button enabled).");
         }
         catch (Exception e)
         {
-            MainFile.Logger.Info(string.Format("Democracy: dismiss rewards screen error: {0}", e.Message));
+            MainFile.LogReward(string.Format("Democracy: dismiss rewards screen error: {0}", e.Message));
         }
     }
 
@@ -171,12 +171,12 @@ public static class AutoPickPatch
             var holder = screen.GetCardHolder(card);
             if (holder == null) return;
 
-            MainFile.Logger.Info(string.Format("Democracy: auto-selecting first card: {0}", card.Title));
+            MainFile.LogReward(string.Format("Democracy: auto-selecting first card: {0}", card.Title));
             screen.SelectCard(holder);
         }
         catch (Exception e)
         {
-            MainFile.Logger.Info(string.Format("Democracy: auto-pick card failed: {0}", e.Message));
+            MainFile.LogReward(string.Format("Democracy: auto-pick card failed: {0}", e.Message));
         }
     }
 }

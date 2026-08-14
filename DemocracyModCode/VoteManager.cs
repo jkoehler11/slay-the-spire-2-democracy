@@ -26,15 +26,37 @@ public static class VoteManager
 
     public static void SubmitClaim(ulong playerId, int goldAmount, List<string> rewardIds)
     {
+        // Dead players may not vote when DeadCanVote is disabled.
+        if (!DemocracyConfig.DeadCanVote && IsDeadPlayer(playerId))
+        {
+            MainFile.LogVote(string.Format("Democracy: claim from P{0} ignored (dead).", playerId));
+            return;
+        }
+
         lock (LockObj)
         {
             _claims[playerId] = new Claim { GoldAmount = goldAmount };
             _claims[playerId].RewardIds.AddRange(rewardIds);
         }
-        MainFile.Logger.Info(string.Format("Democracy: claim from P{0}: {1}g + {2} rewards",
-            playerId, goldAmount, rewardIds.Count));
+
+        if (DemocracyConfig.OpenVoting)
+            MainFile.LogVote(string.Format("Democracy: claim from P{0}: {1}g + [{2}]",
+                playerId, goldAmount, string.Join(", ", rewardIds)));
+        else
+            MainFile.LogVote(string.Format("Democracy: claim from P{0}: {1}g + {2} reward(s)",
+                playerId, goldAmount, rewardIds.Count));
 
         CheckAndResolve();
+    }
+
+    private static bool IsDeadPlayer(ulong playerId)
+    {
+        try
+        {
+            var p = MegaCrit.Sts2.Core.Runs.RunManager.Instance?.State?.GetPlayer(playerId);
+            return p?.Creature?.IsDead == true;
+        }
+        catch { return false; }
     }
 
     private static void CheckAndResolve()
@@ -58,7 +80,7 @@ public static class VoteManager
         var playerIds = CombatRewardPatch.GetSeenPlayerIds();
         if (playerIds.Count == 0) return;
 
-        MainFile.Logger.Info(string.Format("Democracy: RESOLVING CLAIMS — {0} players", playerIds.Count));
+        MainFile.LogVote(string.Format("Democracy: RESOLVING CLAIMS — {0} players", playerIds.Count));
 
         // --- Gold distribution ---
         var goldEntries = RewardPool.GetPending().Where(e => e.Type == RewardPool.PoolEntry.RewardType.GoldPile).ToList();
@@ -73,7 +95,7 @@ public static class VoteManager
         lock (LockObj)
             foreach (var c in _claims.Values) totalClaimedGold += c.GoldAmount;
 
-        MainFile.Logger.Info(string.Format("Democracy: gold — pool {0}g, claimed {1}g", totalGold, totalClaimedGold));
+        MainFile.LogVote(string.Format("Democracy: gold — pool {0}g, claimed {1}g", totalGold, totalClaimedGold));
 
         if (totalGold > 0)
         {
@@ -123,18 +145,18 @@ public static class VoteManager
                     {
                         var w = CombatRewardPatch.GetPlayer(winner);
                         bool inDeck = w?.Deck?.Cards?.Any(c => ReferenceEquals(c, entry.Card)) ?? false;
-                        MainFile.Logger.Info(string.Format(
+                        MainFile.LogDebug(string.Format(
                             "Democracy: OWN-CHECK {0} inWinnerDeck={1} cardOwner={2} winnerId={3}",
                             entry.DisplayName, inDeck, entry.Card.Owner?.NetId ?? 0, winner));
                     }
                     RewardPool.MarkDistributed(entry.Id, winner);
-                    MainFile.Logger.Info(string.Format("Democracy: {0} -> P{1} (uncontested, already owned)", entry.DisplayName, winner));
+                    MainFile.LogVote(string.Format("Democracy: {0} -> P{1} (uncontested, already owned)", entry.DisplayName, winner));
                 }
                 else
                 {
                     await RewardPool.TransferReward(entry, winner);
                     RewardPool.MarkDistributed(entry.Id, winner);
-                    MainFile.Logger.Info(string.Format("Democracy: {0} -> P{1} (uncontested, transferred)", entry.DisplayName, winner));
+                    MainFile.LogVote(string.Format("Democracy: {0} -> P{1} (uncontested, transferred)", entry.DisplayName, winner));
                 }
             }
             else if (claimants.Count > 1)
@@ -149,13 +171,13 @@ public static class VoteManager
                     await RewardPool.TransferReward(entry, winner);
                     RewardPool.MarkDistributed(entry.Id, winner);
                 }
-                MainFile.Logger.Info(string.Format("Democracy: {0} -> P{1} ({2} claimants, tie-broken)", entry.DisplayName, winner, claimants.Count));
+                MainFile.LogVote(string.Format("Democracy: {0} -> P{1} ({2} claimants, tie-broken)", entry.DisplayName, winner, claimants.Count));
             }
             else
             {
                 await RewardPool.DiscardReward(entry);
                 RewardPool.MarkDiscarded(entry.Id);
-                MainFile.Logger.Info(string.Format("Democracy: {0} unclaimed — discarded.", entry.DisplayName));
+                MainFile.LogVote(string.Format("Democracy: {0} unclaimed — discarded.", entry.DisplayName));
             }
         }
 
@@ -163,7 +185,7 @@ public static class VoteManager
             if (entry.Type == RewardPool.PoolEntry.RewardType.GoldPile)
                 RewardPool.MarkDiscarded(entry.Id);
 
-        MainFile.Logger.Info("Democracy: distribution complete.");
+        MainFile.LogVote("Democracy: distribution complete.");
         CombatRewardPatch.RefreshDeckCount();
         MultiplayerCoordinator.SendPoolDistributed();
     }

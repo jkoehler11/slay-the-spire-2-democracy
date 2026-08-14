@@ -36,7 +36,7 @@ public static class CombatRewardPatch
             // desync where the client missed rewards the host pooled.
             if (runState?.CurrentRoom is not CombatRoom)
             {
-                MainFile.Logger.Info(string.Format(
+                MainFile.LogDebug(string.Format(
                     "Democracy: skip pool (room={0})",
                     runState?.CurrentRoom?.GetType().Name ?? "null"));
                 return;
@@ -47,7 +47,7 @@ public static class CombatRewardPatch
             {
                 case GoldReward gold:
                     RewardPool.AddGoldReward(player.NetId, gold.Amount);
-                    MainFile.Logger.Info(string.Format("Democracy: {0}g from P{1} pool {2}g", gold.Amount, player.NetId, RewardPool.TotalGoldPooled));
+                    MainFile.LogReward(string.Format("Democracy: {0}g from P{1} pool {2}g", gold.Amount, player.NetId, RewardPool.TotalGoldPooled));
                     break;
                 case CardReward card:
                     string cardNames;
@@ -61,19 +61,19 @@ public static class CombatRewardPatch
                     catch { cardNames = "Card Reward"; }
                     var cardModel = RewardPool.TakePendingGrant(player.NetId, RewardPool.PoolEntry.RewardType.CardReward) as CardModel;
                     RewardPool.AddCardReward(player.NetId, card.OptionCount, cardNames, cardModel);
-                    MainFile.Logger.Info(string.Format("Democracy: card [{0}] from P{1} pool {2}c",
+                    MainFile.LogReward(string.Format("Democracy: card [{0}] from P{1} pool {2}c",
                         cardModel?.Title ?? cardNames, player.NetId, RewardPool.TotalCardsPooled));
                     break;
                 case PotionReward potion:
                     var potionModel = RewardPool.TakePendingGrant(player.NetId, RewardPool.PoolEntry.RewardType.Potion) as PotionModel;
                     RewardPool.AddPotionReward(player.NetId, LocName(potion.Potion?.Title), potionModel);
-                    MainFile.Logger.Info(string.Format("Democracy: potion [{0}] from P{1} pool {2}p",
+                    MainFile.LogReward(string.Format("Democracy: potion [{0}] from P{1} pool {2}p",
                         potionModel?.Id.ToString() ?? LocName(potion.Potion?.Title), player.NetId, RewardPool.TotalPotionsPooled));
                     break;
                 case RelicReward relic:
                     var relicModel = RewardPool.TakePendingGrant(player.NetId, RewardPool.PoolEntry.RewardType.Relic) as RelicModel;
                     RewardPool.AddRelicReward(player.NetId, LocName(relic.Relic?.Title), false, relicModel);
-                    MainFile.Logger.Info(string.Format("Democracy: relic [{0}] from P{1} pool {2}r",
+                    MainFile.LogReward(string.Format("Democracy: relic [{0}] from P{1} pool {2}r",
                         relicModel?.Id.ToString() ?? LocName(relic.Relic?.Title), player.NetId, RewardPool.TotalRelicsPooled));
                     break;
                 default:
@@ -194,7 +194,7 @@ public static class CombatRewardPatch
                     try { modelDeck = screen._player?.Deck?.Cards?.Count ?? -1; } catch { }
                     try { bottomLabel = screen._bottomLabel?.Text ?? "?"; } catch { }
 
-                    MainFile.Logger.Info(string.Format(
+                    MainFile.LogDebug(string.Format(
                         "Democracy: DECKVIEW-DUMP P{0} pile={1}c model={2}c {3} bottom=\"{4}\"",
                         pid, pileC, modelDeck, slideInfo, bottomLabel));
 
@@ -217,7 +217,7 @@ public static class CombatRewardPatch
                                     try { vis = h.Visible; } catch { }
                                     parts.Add(t + (vis ? "" : "(h)"));
                                 }
-                                MainFile.Logger.Info(string.Format(
+                                MainFile.LogDebug(string.Format(
                                     "Democracy:   row{0}: {1}", r, string.Join(" | ", parts)));
                                 r++;
                             }
@@ -225,7 +225,7 @@ public static class CombatRewardPatch
                     }
                     catch (Exception e)
                     {
-                        MainFile.Logger.Info("Democracy: holder dump error: " + e.Message);
+                        MainFile.LogDebug("Democracy: holder dump error: " + e.Message);
                     }
 
                     // Only re-render if the rendered holders clearly diverge from the live pile.
@@ -237,14 +237,14 @@ public static class CombatRewardPatch
 
                     if (needRefresh)
                     {
-                        MainFile.Logger.Info("Democracy: deck view grid STALE — re-rendering");
+                        MainFile.LogDebug("Democracy: deck view grid STALE — re-rendering");
                         screen._cards = live;
                         screen.DisplayCards();
                     }
                 }
                 catch (Exception e)
                 {
-                    MainFile.Logger.Info("Democracy: deck view refresh error: " + e.Message);
+                    MainFile.LogDebug("Democracy: deck view refresh error: " + e.Message);
                 }
             };
         }
@@ -268,11 +268,11 @@ public static class CombatRewardPatch
                 string label;
                 try { label = __instance._countLabel?.Text ?? "null"; } catch { label = "ERR"; }
                 ulong pid = __instance._player?.NetId ?? 0;
-                MainFile.Logger.Info(string.Format("Democracy: DECKBUTTON P{0} pile={1} label=\"{2}\"", pid, pile, label));
+                MainFile.LogDebug(string.Format("Democracy: DECKBUTTON P{0} pile={1} label=\"{2}\"", pid, pile, label));
             }
             catch (Exception e)
             {
-                MainFile.Logger.Info("Democracy: DECKBUTTON probe error: " + e.Message);
+                MainFile.LogDebug("Democracy: DECKBUTTON probe error: " + e.Message);
             }
         }
     }
@@ -305,7 +305,7 @@ public static class CombatRewardPatch
         }
         catch (Exception e)
         {
-            MainFile.Logger.Info("Democracy: refresh deck count error: " + e.Message);
+            MainFile.LogDebug("Democracy: refresh deck count error: " + e.Message);
         }
     }
 

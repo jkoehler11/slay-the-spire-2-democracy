@@ -19,7 +19,7 @@ public partial class VotePanel : CanvasLayer
     private Label _status = null!;
     private Button _submitBtn = null!;
     private bool _submitted;
-    private int _timeout = 45;
+    private int _timeout = DemocracyConfig.VoteTimeoutSeconds;
     private int _elapsed;
 
     public override void _Ready()
@@ -52,7 +52,7 @@ public partial class VotePanel : CanvasLayer
         // Title
         var title = new Label
         {
-            Text = "\U0001f5f3 CLAIM REWARDS",
+            Text = "\U0001f5f3 CLAIM REWARDS" + (DemocracyConfig.OpenVoting ? " - VOTES PUBLIC" : ""),
             Position = new Vector2(20, 12),
             Size = new Vector2(720, 36),
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -106,7 +106,7 @@ public partial class VotePanel : CanvasLayer
                 MinValue = 0,
                 MaxValue = RewardPool.TotalGoldPooled,
                 Step = 1,
-                Value = 0,
+                Value = DemocracyConfig.SelfishDefault ? RewardPool.TotalGoldPooled : 0,
                 CustomMinimumSize = new Vector2(120, 32),
             };
             _goldSpin.AddThemeFontSizeOverride("font_size", 16);
@@ -129,6 +129,7 @@ public partial class VotePanel : CanvasLayer
             var cb = new CheckBox
             {
                 Text = entry.DisplayName,
+                ButtonPressed = DemocracyConfig.SelfishDefault,
                 CustomMinimumSize = new Vector2(0, 34),
             };
             cb.AddThemeColorOverride("font_color", new Color(0.9f, 0.9f, 0.9f));
@@ -161,7 +162,7 @@ public partial class VotePanel : CanvasLayer
         // Initialize local player ID
         MultiplayerCoordinator.InitializeForRun();
 
-        MainFile.Logger.Info(string.Format("Democracy: ClaimPanel shown — {0} rewards, {1}g",
+        MainFile.LogVote(string.Format("Democracy: ClaimPanel shown — {0} rewards, {1}g",
             _claimBoxes.Count, RewardPool.TotalGoldPooled));
     }
 
@@ -177,7 +178,7 @@ public partial class VotePanel : CanvasLayer
 
         int goldAmount = _goldSpin != null ? (int)_goldSpin.Value : 0;
 
-        MainFile.Logger.Info(string.Format("Democracy: submitting claim — {0}g + {1} rewards",
+        MainFile.LogVote(string.Format("Democracy: submitting claim — {0}g + {1} rewards",
             goldAmount, claimedIds.Count));
 
         MultiplayerCoordinator.SendClaim(goldAmount, claimedIds);
@@ -212,7 +213,7 @@ public partial class VotePanel : CanvasLayer
             var remaining = _timeout - _elapsed / 60;
             if (remaining <= 0)
             {
-                MainFile.Logger.Info("Democracy: claim timeout — auto-distributing.");
+                MainFile.LogVote("Democracy: claim timeout — auto-distributing.");
                 if (!_submitted) OnSubmit();
                 else if (!VoteManager.ResolutionDone)
                 {

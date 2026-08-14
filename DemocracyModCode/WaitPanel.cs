@@ -67,7 +67,7 @@ public partial class WaitPanel : CanvasLayer
 
         banner.AddChild(box);
 
-        MainFile.Logger.Info("Democracy: WaitPanel shown (non-blocking).");
+        MainFile.LogVote("Democracy: WaitPanel shown (non-blocking).");
     }
 
     public override void _Process(double delta)

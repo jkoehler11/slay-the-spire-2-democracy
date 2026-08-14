@@ -14,7 +14,7 @@ public static class ShopPatch
         static void Postfix(Player player)
         {
             if (!CombatRewardPatch.IsDemocracyActive) return;
-            MainFile.Logger.Info(string.Format("Democracy: Player P{0} purchased an item.", player.NetId));
+            MainFile.LogShop(string.Format("Democracy: Player P{0} purchased an item.", player.NetId));
         }
     }
 }
