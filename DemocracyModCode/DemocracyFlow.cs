@@ -70,14 +70,19 @@ public static class DemocracyFlow
         MultiplayerCoordinator.InitializeForRun();
         VoteManager.BeginFlow();
 
-        // Begin at the FIRST stage that actually has loot. Stages with nothing pooled
-        // (e.g. a fight that dropped no gold, or no potions) are skipped entirely.
+        // Begin at the FIRST stage that actually has loot AND is enabled in the config.
+        // Stages with nothing pooled (e.g. a fight that dropped no gold, or no potions),
+        // or with their screen disabled in the config, are skipped entirely — their
+        // rewards stay with whoever earned them.
         int first = NextStageWithLoot(StageGold - 1);
         if (first < 0)
         {
-            MainFile.LogVote("Democracy: no loot to vote on — skipping claim flow.");
-            VoteManager.Reset();
-            _started = false;
+            // No enabled stage has loot, but there may still be pooled rewards. Resolve
+            // them keep-own: gold stays where it was granted and every non-gold reward
+            // returns to its source (no vote). The host computes and broadcasts the
+            // trivial decision; clients apply it verbatim.
+            MainFile.LogVote("Democracy: no enabled stage has loot — resolving keep-own.");
+            VoteManager.ResolveKeepOwn();
             return;
         }
 
@@ -85,13 +90,15 @@ public static class DemocracyFlow
         ShowStage(first);
     }
 
-    /// <summary>True if the given stage has at least one pooled reward to vote on.</summary>
+    /// <summary>True if the given stage should be shown: it has at least one pooled reward
+    /// to vote on AND its screen is enabled in the config. A disabled screen's rewards stay
+    /// with whoever earned them (the stage is skipped like an empty one).</summary>
     public static bool HasLootForStage(int stage) => stage switch
     {
-        StageGold => RewardPool.TotalGoldPooled > 0,
-        StagePotions => RewardPool.GetNonGoldPending().Any(e => e.Type == RewardPool.PoolEntry.RewardType.Potion),
-        StageRelics => RewardPool.GetNonGoldPending().Any(e => e.Type is RewardPool.PoolEntry.RewardType.Relic or RewardPool.PoolEntry.RewardType.BossRelic),
-        StageCards => RewardPool.GetNonGoldPending().Any(e => e.Type == RewardPool.PoolEntry.RewardType.CardReward),
+        StageGold => DemocracyConfig.ShowGoldScreen && RewardPool.TotalGoldPooled > 0,
+        StagePotions => DemocracyConfig.ShowPotionsScreen && RewardPool.GetNonGoldPending().Any(e => e.Type == RewardPool.PoolEntry.RewardType.Potion),
+        StageRelics => DemocracyConfig.ShowRelicsScreen && RewardPool.GetNonGoldPending().Any(e => e.Type is RewardPool.PoolEntry.RewardType.Relic or RewardPool.PoolEntry.RewardType.BossRelic),
+        StageCards => DemocracyConfig.ShowCardsScreen && RewardPool.GetNonGoldPending().Any(e => e.Type == RewardPool.PoolEntry.RewardType.CardReward),
         _ => false,
     };
 

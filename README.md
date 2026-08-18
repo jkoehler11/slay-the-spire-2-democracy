@@ -21,7 +21,8 @@ simulation. Works with **2–4 players**.
    tagged with who earned them, and the group walks through up to four pages, one reward
    category at a time. Every page uses the game's native event-choice buttons (large title
    + description buttons), the group **only advances when every player has submitted the
-   current page**, and **any page with nothing pooled is skipped automatically**:
+   current page**, and **any page with nothing pooled is skipped automatically**. Each page
+   can also be disabled in the config — its rewards then stay with whoever earned them:
    - **Gold.** A three-option vote: **Original amount** (keep what you earned),
      **Randomized** (pool and deal randomly), or **Distribute evenly** (pool and split
      evenly). Plurality wins; ties break deterministically.
@@ -99,15 +100,30 @@ they unzipped the editor.
 
 ## Configuration
 
-Editable in-game via BaseLib `SimpleModConfig`:
+Editable in-game via BaseLib `SimpleModConfig`, grouped into sections.
 
-| Setting              | Default          | Description                                                       |
-|----------------------|------------------|-------------------------------------------------------------------|
-| Tie-Break Fairness   | 0.10             | Weight bonus for players who have won fewer rewards               |
-| Show Results Summary | ON               | Show what everyone received after each combat (OFF skips it)      |
+**Combat** — controls the post-combat claim flow:
+
+| Setting              | Default | Description                                                          |
+|----------------------|---------|----------------------------------------------------------------------|
+| Show Gold Screen     | ON      | Vote on how to split gold. OFF: gold stays with whoever earned it.   |
+| Show Potions Screen  | ON      | Vote on potion claims. OFF: potions stay with whoever earned them.   |
+| Show Relics Screen   | ON      | Vote on relic claims. OFF: relics stay with whoever earned them.     |
+| Show Cards Screen    | ON      | Vote on card claims. OFF: cards stay with whoever earned them.       |
+| Show Results Summary | ON      | Show what everyone received after each combat (OFF skips it)         |
+
+**Gameplay**:
+
+| Setting            | Default | Description                                          |
+|--------------------|---------|------------------------------------------------------|
+| Tie-Break Fairness | 0.10    | Weight bonus for players who have won fewer rewards  |
 
 Logging toggles: **Log All Rewards**, **Log All Votes**, **Log Shop Activity** (all ON),
 and **Debug Logging** (OFF — enables the verbose DECKVIEW/XFER diagnostics).
+
+> All players in a multiplayer run should use identical **Combat** section settings. The
+> per-screen toggles are read independently on every machine, so a host/client mismatch
+> will make the machines disagree about which pages to show and stall or desync the run.
 
 ## Localization
 
@@ -116,8 +132,7 @@ All user-facing text — the in-game choice/wait/results screens and every Mod S
 key is missing. Strings live in `DemocracyMod/localization/<lang>/` as flat JSON, packed
 into `DemocracyMod.pck` at publish time:
 
-- `settings_ui.json` — Mod Settings labels + dropdown option labels. Keys are
-  `DEMOCRACYMOD-<PROPERTY_NAME>.title` and `DEMOCRACYMOD-REWARD_SELECTION.<EnumValue>`
+- `settings_ui.json` — Mod Settings labels. Keys are `DEMOCRACYMOD-<PROPERTY_NAME>.title`
   (BaseLib looks these up automatically via the mod prefix + slugified property name).
 - `ui.json` — in-game panel text, looked up by the mod as `LocString("ui", key)`. The
   `MainFile.Loc(key, fallback)` helper wraps this so missing keys degrade gracefully.

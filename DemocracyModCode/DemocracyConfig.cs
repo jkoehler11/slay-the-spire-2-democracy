@@ -22,12 +22,30 @@ public enum GoldVoteMode
 /// </summary>
 public class DemocracyConfig : SimpleModConfig
 {
-    [ConfigSection("Gameplay")]
-    [ConfigSlider(0f, 1f, 0.05f)] public static float TieBreakFairness { get; set; } = 0.1f;
+    [ConfigSection("Combat")]
+    /// <summary>Show the gold-distribution vote screen. When disabled, gold stays with
+    /// whoever earned it.</summary>
+    [ConfigHoverTip]
+    public static bool ShowGoldScreen { get; set; } = true;
+    /// <summary>Show the potion-claim vote screen. When disabled, potions stay with
+    /// whoever earned them.</summary>
+    [ConfigHoverTip]
+    public static bool ShowPotionsScreen { get; set; } = true;
+    /// <summary>Show the relic-claim vote screen. When disabled, relics stay with
+    /// whoever earned them.</summary>
+    [ConfigHoverTip]
+    public static bool ShowRelicsScreen { get; set; } = true;
+    /// <summary>Show the card-claim vote screen. When disabled, cards stay with
+    /// whoever earned them.</summary>
+    [ConfigHoverTip]
+    public static bool ShowCardsScreen { get; set; } = true;
     /// <summary>Show the post-combat results summary (what everyone received). When
     /// disabled the group advances straight past it after the distribution resolves.</summary>
     [ConfigHoverTip]
     public static bool ShowResultsPanel { get; set; } = true;
+
+    [ConfigSection("Gameplay")]
+    [ConfigSlider(0f, 1f, 0.05f)] public static float TieBreakFairness { get; set; } = 0.1f;
 
     [ConfigSection("Logging")]
     public static bool DebugLogging { get; set; }

@@ -156,7 +156,10 @@ Every decision the host makes must be byte-identical on every machine. The mod e
   `Guid`, `DateTime`, or `GetHashCode()`),
 - host-authoritative resolution (clients never resolve independently),
 - deterministic stage skipping (a page is skipped on every machine only when its pool is
-  empty on every machine).
+  empty on every machine),
+- matching config across machines (the per-screen show toggles are read on every machine,
+  so all players must use identical Combat-section settings, or they will disagree about
+  which pages to show and desync).
 
 ## Configuration
 
@@ -164,8 +167,15 @@ Via BaseLib `SimpleModConfig` (editable in-game):
 
 | Setting            | Default          | Purpose                                                    |
 |--------------------|------------------|------------------------------------------------------------|
-| Tie-Break Fairness | 0.10             | Weight bonus for win-count deficit in contested tie-breaks |
+| Show Gold Screen   | ON               | Vote on gold split. OFF: gold stays with its earner.       |
+| Show Potions Screen| ON               | Vote on potion claims. OFF: potions stay with their earner.|
+| Show Relics Screen | ON               | Vote on relic claims. OFF: relics stay with their earner.  |
+| Show Cards Screen  | ON               | Vote on card claims. OFF: cards stay with their earner.    |
 | Show Results       | ON               | Show the post-combat results summary (OFF skips it)        |
+| Tie-Break Fairness | 0.10             | Weight bonus for win-count deficit in contested tie-breaks |
+
+The four show-screen toggles live in a **Combat** section; the results summary toggle also
+moved there. A disabled screen's rewards are simply kept by whoever earned them.
 
 ## Roadmap
 

@@ -143,6 +143,18 @@ public static class VoteManager
         DemocracyFlow.ShowStage(nextStage);
     }
 
+    /// <summary>
+    /// Resolves the pool with no votes cast. Used when no enabled stage has loot (every
+    /// page is empty or disabled in the config): gold stays with its earner and non-gold
+    /// rewards return to their source. Only the host resolves; clients apply the broadcast
+    /// verbatim via ApplyResolved (a client with no stage to show simply waits here).
+    /// </summary>
+    public static void ResolveKeepOwn()
+    {
+        if (MultiplayerCoordinator.IsHost)
+            _ = ResolveAndBroadcastAsync();
+    }
+
     // ---- Host-authoritative resolution (after the final cards stage) ----
     private static async Task ResolveAndBroadcastAsync()
     {
