@@ -36,6 +36,11 @@ public static class MultiplayerCoordinator
             GoldMode = r.GoldMode,
         });
 
+    /// <summary>Broadcast this player's current live selection for the current stage
+    /// (cosmetic icon display only — the authoritative vote is SendStage).</summary>
+    public static void SendSelection(int stage, List<string> selectedIds)
+        => Send(new DemocracySelectionMessage { Stage = stage, SelectedIds = selectedIds });
+
     internal static void HandleStage(ulong senderId, DemocracyStageMessage msg)
         => VoteManager.SubmitStage(senderId, msg.Stage, msg.GoldMode, msg.RewardIds);
 
@@ -44,6 +49,9 @@ public static class MultiplayerCoordinator
 
     internal static void HandleResolved(ulong senderId, DemocracyResolvedMessage msg)
         => VoteManager.ApplyResolved(msg);
+
+    internal static void HandleSelection(ulong senderId, DemocracySelectionMessage msg)
+        => DemocracyFlow.ApplyRemoteSelection(senderId, msg.Stage, msg.SelectedIds);
 
     public static void InitializeForRun()
     {

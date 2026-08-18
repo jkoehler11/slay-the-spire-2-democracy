@@ -1,6 +1,7 @@
 using HarmonyLib;
 using Godot;
 using MegaCrit.Sts2.Core.Nodes.Events;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.Screens;
 using MegaCrit.Sts2.Core.Rooms;
@@ -116,6 +117,28 @@ public static class NativeUiPatch
         static void Postfix()
         {
             MainFile.Logger.Info("[CRASHDBG] NEventRoom.SetOptions done");
+        }
+    }
+
+    /// <summary>
+    /// Player-icon vote display. The native event-option button shows each player's
+    /// character icon for players who "voted" for it, driven by the private
+    /// ShouldDisplayPlayerVote(Player) delegate (bound to the button's
+    /// NMultiplayerVoteContainer in _Ready). That delegate reads the game's
+    /// EventSynchronizer vote state, which is empty for our synthetic claim options.
+    /// While the claim flow is active we answer instead from DemocracyFlow's live
+    /// per-player selection map, then RefreshVotes() renders the icons.
+    /// </summary>
+    [HarmonyPatch(typeof(NEventOptionButton), "ShouldDisplayPlayerVote")]
+    public static class DemocracyPlayerVoteIcons
+    {
+        [HarmonyPrefix]
+        static bool Prefix(NEventOptionButton __instance, Player player, ref bool __result)
+        {
+            if (!DemocracyFlow.IsClaimActive) return true;   // vanilla (shared events)
+            var optId = __instance.Option?.TextKey;
+            __result = optId != null && DemocracyFlow.HasSelected(player.NetId, optId);
+            return false;
         }
     }
 

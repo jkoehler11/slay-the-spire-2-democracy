@@ -40,6 +40,7 @@ public static class DemocracyFlow
         public string Title = "";
         public string Description = "";
         public bool InitiallySelected = false;
+        public RewardPool.PoolEntry? Entry = null;
     }
 
     private static bool _started;
@@ -55,6 +56,17 @@ public static class DemocracyFlow
     private static Action<List<string>>? _onNext;
     private static readonly List<string> _selected = new();
     private static bool _done;
+
+    // Live per-player selections for the CURRENT stage: option id -> set of player
+    // NetIds who currently have it selected. Drives the per-button player icons.
+    private static readonly Dictionary<string, HashSet<ulong>> _selectionByOption = new();
+
+    // Buffered REMOTE selections keyed by (playerId, stage). A peer's selection
+    // broadcast can arrive before this machine's Start()/ShowScreen has run (or before
+    // the stage screen is set up); we keep the latest per stage so the icon always
+    // shows once the screen renders, instead of dropping the early broadcast.
+    private static readonly object _remoteSelLock = new();
+    private static readonly Dictionary<ulong, Dictionary<int, List<string>>> _remoteSelections = new();
 
     /// <summary>True while the native claim screens are shown (drives the get_Instance
     /// patch so the event buttons route to OUR room).</summary>
@@ -164,6 +176,7 @@ public static class DemocracyFlow
                 MainFile.Loc("DemocracyMod.Choice.EarnedBy", "Earned by {0}"),
                 VoteManager.PlayerLabel(e.SourcePlayerId)),
             InitiallySelected = false,
+            Entry = e,
         }).ToList();
 
         ShowScreen(Mode.Multi, title, subtitle, nextLabel, options, ids =>
@@ -221,6 +234,12 @@ public static class DemocracyFlow
         _selected.Clear();
         foreach (var o in options)
             if (o.InitiallySelected) _selected.Add(o.Id);
+
+        // New stage: rebuild the live per-player selection map from the local player's
+        // default selection plus any remote selections buffered for this stage, then
+        // broadcast our own so peers show our icon from the start.
+        RebuildSelectionMap();
+        BroadcastSelection();
 
         if (_room == null || !GodotObject.IsInstanceValid(_room))
         {
@@ -347,7 +366,7 @@ public static class DemocracyFlow
                     {
                         MainFile.Logger.Info("[CRASHDBG] Render: building option " + o.Id);
                         var eo = new EventOption(ev, () => HandleChoice(o.Id), o.Id,
-                            disableOnChosen: false, isProceed: true, hoverTips: Array.Empty<IHoverTip>());
+                            disableOnChosen: false, isProceed: true, hoverTips: BuildHoverTips(o));
                         evOptions.Add(eo);
                         MainFile.Logger.Info("[CRASHDBG] Render: built option " + o.Id);
                     }
@@ -380,6 +399,7 @@ public static class DemocracyFlow
             // The native buttons resolve their text from the event's loc table, which won't
             // have our dynamic titles/descriptions — stamp our text onto the labels directly.
             RefreshAllLabels();
+            RefreshAllVoteIcons();
             MainFile.Logger.Info("[CRASHDBG] Render: labels refreshed");
 
             MainFile.LogVote(string.Format("Democracy: native event stage shown - {0} ({1} options, {2})",
@@ -406,7 +426,118 @@ public static class DemocracyFlow
             else _selected.Add(id);
             RefreshLabel(id);
         }
+        SetPlayerSelection(MultiplayerCoordinator.LocalPlayerId, _selected);
+        BroadcastSelection();
+        RefreshAllVoteIcons();
         return Task.CompletedTask;
+    }
+
+    /// <summary>True if <paramref name="playerId"/> currently has <paramref name="optionId"/>
+    /// selected on the current stage (used by the player-icon vote display).</summary>
+    public static bool HasSelected(ulong playerId, string optionId) =>
+        _selectionByOption.TryGetValue(optionId, out var set) && set.Contains(playerId);
+
+    /// <summary>Replaces a player's selections on the current stage with the given ids.</summary>
+    private static void SetPlayerSelection(ulong playerId, List<string> selectedIds)
+    {
+        foreach (var set in _selectionByOption.Values)
+            set.Remove(playerId);
+        foreach (var id in selectedIds)
+        {
+            if (!_selectionByOption.TryGetValue(id, out var set))
+            {
+                set = new HashSet<ulong>();
+                _selectionByOption[id] = set;
+            }
+            set.Add(playerId);
+        }
+    }
+
+    /// <summary>Applies a peer's live selection broadcast (icon display only). The
+    /// selection is ALWAYS buffered (keyed by player + stage) so an early broadcast that
+    /// arrives before Start()/ShowScreen has run isn't lost — RebuildSelectionMap merges
+    /// it in when the stage renders. If we're already on that stage we apply it live.</summary>
+    public static void ApplyRemoteSelection(ulong playerId, int stage, List<string> selectedIds)
+    {
+        if (playerId == MultiplayerCoordinator.LocalPlayerId) return;   // own echo
+        lock (_remoteSelLock)
+        {
+            if (!_remoteSelections.TryGetValue(playerId, out var byStage))
+            { byStage = new(); _remoteSelections[playerId] = byStage; }
+            byStage[stage] = new List<string>(selectedIds);
+        }
+        if (!_started || _done) return;
+        if (stage != VoteManager.CurrentStage) return;
+        SetPlayerSelection(playerId, selectedIds);
+        RefreshAllVoteIcons();
+    }
+
+    /// <summary>Rebuilds _selectionByOption for the current stage from the local player's
+    /// selections plus every buffered remote selection for that stage.</summary>
+    private static void RebuildSelectionMap()
+    {
+        _selectionByOption.Clear();
+        SetPlayerSelection(MultiplayerCoordinator.LocalPlayerId, _selected);
+        int stage = VoteManager.CurrentStage;
+        lock (_remoteSelLock)
+        {
+            foreach (var kv in _remoteSelections)
+            {
+                if (kv.Value.TryGetValue(stage, out var ids))
+                    SetPlayerSelection(kv.Key, ids);
+            }
+        }
+    }
+
+    private static void BroadcastSelection()
+    {
+        if (_done) return;
+        MultiplayerCoordinator.SendSelection(VoteManager.CurrentStage, new List<string>(_selected));
+    }
+
+    private static void RefreshAllVoteIcons()
+    {
+        try
+        {
+            if (_room == null || !GodotObject.IsInstanceValid(_room)) return;
+            var layout = _room.Layout;
+            if (layout == null) return;
+            foreach (var btn in layout.OptionButtons)
+                btn.RefreshVotes();
+        }
+        catch (Exception e)
+        {
+            MainFile.LogDebug("Democracy: refresh vote icons error: " + e.Message);
+        }
+    }
+
+    /// <summary>Hover tips for an option so hovering shows the underlying card/potion/relic.</summary>
+    private static IHoverTip[] BuildHoverTips(Option opt)
+    {
+        var tips = new List<IHoverTip>();
+        var e = opt.Entry;
+        if (e == null) return tips.ToArray();
+        try
+        {
+            switch (e.Type)
+            {
+                case RewardPool.PoolEntry.RewardType.CardReward:
+                    if (e.Card != null) tips.Add(HoverTipFactory.FromCard(e.Card));
+                    break;
+                case RewardPool.PoolEntry.RewardType.Relic:
+                case RewardPool.PoolEntry.RewardType.BossRelic:
+                    if (e.Relic != null) tips.AddRange(HoverTipFactory.FromRelic(e.Relic));
+                    break;
+                case RewardPool.PoolEntry.RewardType.Potion:
+                    if (e.Potion != null) tips.Add(HoverTipFactory.FromPotion(e.Potion));
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            MainFile.LogDebug("Democracy: hover tip error for " + opt.Id + ": " + ex.Message);
+        }
+        return tips.ToArray();
     }
 
     private static void RefreshAllLabels()
@@ -507,5 +638,7 @@ public static class DemocracyFlow
         _onNext = null;
         _selected.Clear();
         _options.Clear();
+        _selectionByOption.Clear();
+        lock (_remoteSelLock) _remoteSelections.Clear();
     }
 }

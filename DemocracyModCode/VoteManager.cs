@@ -49,6 +49,9 @@ public static class VoteManager
 
     public static bool ResolutionDone => _resolutionDone;
 
+    /// <summary>The stage currently being presented (0-3).</summary>
+    public static int CurrentStage { get { lock (LockObj) return _currentStage; } }
+
     public static void BeginFlow()
     {
         lock (LockObj)

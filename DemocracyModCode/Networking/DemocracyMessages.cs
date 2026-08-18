@@ -129,3 +129,38 @@ public sealed class DemocracyResolvedMessage : ICustomMessage
 
     public void HandleMessage(ulong senderId) => MultiplayerCoordinator.HandleResolved(senderId, this);
 }
+
+/// <summary>
+/// Live selection broadcast (cosmetic only). Sent every time a player toggles an
+/// option on the current claim stage — or when a stage first renders, so their
+/// default selection (e.g. the gold stage's "original amount") is visible too.
+/// Each peer shows the sender's character icon on every option they have selected.
+/// This is NOT the authoritative vote — that is still DemocracyStageMessage,
+/// submitted when the player presses Next/Finish.
+/// </summary>
+public sealed class DemocracySelectionMessage : ICustomMessage
+{
+    public int Stage;
+    public List<string> SelectedIds = new();
+
+    public bool ShouldBroadcast => true;
+    public NetTransferMode Mode => NetTransferMode.Reliable;
+    public LogLevel LogLevel => LogLevel.Debug;
+
+    public void Serialize(PacketWriter w)
+    {
+        w.WriteInt(Stage);
+        w.WriteInt(SelectedIds.Count);
+        foreach (var id in SelectedIds) w.WriteString(id);
+    }
+
+    public void Deserialize(PacketReader r)
+    {
+        Stage = r.ReadInt();
+        var c = r.ReadInt();
+        SelectedIds = new(c);
+        for (var i = 0; i < c; i++) SelectedIds.Add(r.ReadString());
+    }
+
+    public void HandleMessage(ulong senderId) => MultiplayerCoordinator.HandleSelection(senderId, this);
+}
