@@ -6,18 +6,34 @@ namespace DemocracyMod.DemocracyModCode;
 /// <summary>
 /// How a player's combat rewards are selected, and what happens to rewards nobody
 /// claims. BaseLib renders enum-typed config properties as a dropdown.
+/// In the event-style claim flow, this also controls the DEFAULT toggle state of
+/// the reward choice buttons (SelectAllRewards pre-checks every button).
 /// </summary>
 public enum RewardSelectionMode
 {
-    /// <summary>Claim nothing by default. The claim panel starts empty; unclaimed
-    /// rewards are discarded and unclaimed gold is even-split. "Use it or lose it."</summary>
+    /// <summary>Claim nothing by default. The claim screens start empty; unclaimed
+    /// rewards are discarded. "Use it or lose it."</summary>
     SelectNoRewards,
-    /// <summary>Keep what you earned (default). Each player keeps their own card and
-    /// exact gold unless someone claims them; unclaimed rewards return to their owner.</summary>
+    /// <summary>Keep what you earned (default). Unclaimed rewards return to whoever
+    /// earned them instead of being discarded.</summary>
     KeepOwnRewards,
-    /// <summary>Grab everything. The claim panel pre-checks every reward and pre-fills
-    /// the full gold pool, and cards are auto-selected — a one-click take-all.</summary>
+    /// <summary>Grab everything. Every reward button starts pre-checked for a
+    /// one-click take-all.</summary>
     SelectAllRewards,
+}
+
+/// <summary>
+/// How the shared gold pool is distributed. Each player votes for one of three
+/// modes; the mode with the most votes wins (deterministically tie-broken).
+/// </summary>
+public enum GoldVoteMode
+{
+    /// <summary>Everyone keeps exactly the gold they earned. No pooling.</summary>
+    OriginalAmount,
+    /// <summary>Pool all gold and distribute it randomly among all players.</summary>
+    Randomized,
+    /// <summary>Pool all gold and split it evenly among all players.</summary>
+    DistributeEvenly,
 }
 
 /// <summary>
@@ -27,9 +43,7 @@ public enum RewardSelectionMode
 public class DemocracyConfig : SimpleModConfig
 {
     [ConfigSection("Gameplay")]
-    [ConfigSlider(0, 120)] public static int VoteTimeoutSeconds { get; set; } = 45;
     public static bool ShopDemocracy { get; set; } = false;
-    public static bool AutoPickRewards { get; set; } = false;
     public static bool ShopRedistribute { get; set; } = false;
     /// <summary>How combat rewards are selected and what happens to unclaimed ones.
     /// BaseLib renders enum-typed config properties as a dropdown.</summary>

@@ -50,20 +50,13 @@ public static class CombatRewardPatch
                     MainFile.LogReward(string.Format("Democracy: {0}g from P{1} pool {2}g", gold.Amount, player.NetId, RewardPool.TotalGoldPooled));
                     break;
                 case CardReward card:
-                    string cardNames;
-                    try
-                    {
-                        var cards = card.Cards?.ToList();
-                        cardNames = (cards != null && cards.Count > 0)
-                            ? string.Join(", ", cards.Select(c => c.Title))
-                            : "Card Reward";
-                    }
-                    catch { cardNames = "Card Reward"; }
-                    var cardModel = RewardPool.TakePendingGrant(player.NetId, RewardPool.PoolEntry.RewardType.CardReward) as CardModel;
-                    RewardPool.AddCardReward(player.NetId, card.OptionCount, cardNames, cardModel);
-                    MainFile.LogReward(string.Format("Democracy: card [{0}] from P{1} pool {2}c",
-                        cardModel?.Title ?? cardNames, player.NetId, RewardPool.TotalCardsPooled));
-                    break;
+                    // The player already picked their own card on the vanilla loot
+                    // screen; that pick granted exactly one card (captured by
+                    // CaptureCardGrant). Pool ONLY the selected card — the un-picked
+                    // options are discarded by the game and must NOT be offered on the
+                    // cards stage.
+                    PoolCardReward(player, card);
+                    return;   // NotifyRewardPooled is called inside PoolCardReward
                 case PotionReward potion:
                     var potionModel = RewardPool.TakePendingGrant(player.NetId, RewardPool.PoolEntry.RewardType.Potion) as PotionModel;
                     RewardPool.AddPotionReward(player.NetId, LocName(potion.Potion?.Title), potionModel);
@@ -84,6 +77,34 @@ public static class CombatRewardPatch
             // Re-check completion — this is the signal that a reward was actually picked.
             PostCombatPatch.NotifyRewardPooled();
         }
+    }
+
+    /// <summary>
+    /// Pools the single card the player actually SELECTED on the vanilla loot screen.
+    /// The game grants the chosen card via CardPileCmd.Add (captured by
+    /// CaptureCardGrant) and discards the other options, so the cards stage must offer
+    /// only the selected card — not every generated option. Runs on every machine
+    /// deterministically (AfterRewardTaken fires on all clients for all players).
+    /// </summary>
+    private static void PoolCardReward(Player player, CardReward card)
+    {
+        try
+        {
+            // Exactly one selected card grant is pending per card reward (the vanilla
+            // pick granted it just before AfterRewardTaken fired).
+            var selected = RewardPool.TakePendingGrant(player.NetId, RewardPool.PoolEntry.RewardType.CardReward) as CardModel;
+            if (selected != null)
+                RewardPool.AddCardReward(player.NetId, 1, selected.Title, selected);
+
+            MainFile.LogReward(string.Format("Democracy: card reward from P{0} pooled selected card [{1}] (total {2}c)",
+                player.NetId, selected?.Title ?? "?", RewardPool.TotalCardsPooled));
+        }
+        catch (Exception e)
+        {
+            MainFile.LogDebug("Democracy: pool card reward error: " + e.Message);
+        }
+
+        PostCombatPatch.NotifyRewardPooled();
     }
 
     /// <summary>
@@ -134,13 +155,49 @@ public static class CombatRewardPatch
         }
     }
 
-    public static int GetSeenPlayerCount() => _playersById.Count;
+    /// <summary>
+    /// Seed the seen-player cache from the run state so GetSeenPlayerCount() reflects
+    /// the deterministic TOTAL player count on every machine — not just the players
+    /// whose rewards happened to be pooled so far, which can differ per machine by
+    /// timing and cause one machine to resolve the vote early (or fail a transfer
+    /// with "missing P..."). Safe to call repeatedly; it only adds, never removes.
+    /// </summary>
+    public static void SeedPlayersFromRun()
+    {
+        try
+        {
+            var players = RunManager.Instance?.State?.Players;
+            if (players == null) return;
+            foreach (var p in players)
+                if (p != null && p.NetId != 0)
+                    _playersById[p.NetId] = p;
+        }
+        catch { }
+    }
 
-    public static List<ulong> GetSeenPlayerIds() => _playersById.Keys.OrderBy(id => id).ToList();
+    public static int GetSeenPlayerCount()
+    {
+        SeedPlayersFromRun();
+        return _playersById.Count;
+    }
 
-    public static Player? GetPlayer(ulong id) => _playersById.GetValueOrDefault(id);
+    public static List<ulong> GetSeenPlayerIds()
+    {
+        SeedPlayersFromRun();
+        return _playersById.Keys.OrderBy(id => id).ToList();
+    }
 
-    public static List<Player> GetSeenPlayers() => new(_playersById.Values);
+    public static Player? GetPlayer(ulong id)
+    {
+        SeedPlayersFromRun();
+        return _playersById.GetValueOrDefault(id);
+    }
+
+    public static List<Player> GetSeenPlayers()
+    {
+        SeedPlayersFromRun();
+        return new(_playersById.Values);
+    }
 
     /// <summary>
     /// The deck view renders a private `_cards` snapshot refreshed only in _Ready

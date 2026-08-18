@@ -28,3 +28,6 @@ Thumbs.db
 
 # STS2 local (do not commit game files)
 desktop-1.0.jar
+
+# Per-developer local path overrides (GodotPath / Sts2Path)
+local.props

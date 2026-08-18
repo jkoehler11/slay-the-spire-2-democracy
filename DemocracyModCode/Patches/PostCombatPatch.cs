@@ -1,10 +1,10 @@
 using HarmonyLib;
 using Godot;
 using System.Collections.Generic;
-using System.Linq;
 using DemocracyMod.DemocracyModCode;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
+using MegaCrit.Sts2.Core.Runs;
 
 namespace DemocracyMod.DemocracyModCode.Patches;
 
@@ -25,7 +25,6 @@ public static class PostCombatPatch
 {
     private static RewardsSetSynchronizer? _sync;
     private static bool _claimShown;
-    private static VotePanel? _votePanel;
     private static WaitPanel? _waitPanel;
 
     [HarmonyPatch(typeof(RewardsSetSynchronizer), "CompleteRewardsSetIfNecessary")]
@@ -84,7 +83,11 @@ public static class PostCombatPatch
         CloseWaitPanel();
 
         var tree = Engine.GetMainLoop() as SceneTree;
-        if (tree == null) { RewardPool.DistributeEvenly(); return; }
+        if (tree == null)
+        {
+            MainFile.LogDebug("Democracy: no SceneTree - cannot show claim screens.");
+            return;
+        }
 
         var timer = tree.CreateTimer(0.15);
         timer.Timeout += ShowClaimPanel;
@@ -122,8 +125,8 @@ public static class PostCombatPatch
     {
         _sync = null;
         _claimShown = false;
-        CloseVotePanel();
         CloseWaitPanel();
+        DemocracyFlow.Reset();
         VoteManager.Reset();
         CombatRewardPatch.ResetTracking();
         RewardPool.Clear();
@@ -143,7 +146,6 @@ public static class PostCombatPatch
     {
         var tree = Engine.GetMainLoop() as SceneTree;
         if (tree?.Root == null) return;
-        if (_votePanel != null && GodotObject.IsInstanceValid(_votePanel)) return;
 
         int seen = CombatRewardPatch.GetSeenPlayerCount();
         MainFile.LogVote(string.Format(
@@ -151,8 +153,7 @@ public static class PostCombatPatch
             seen, RewardPool.TotalGoldPooled, RewardPool.TotalCardsPooled,
             RewardPool.TotalPotionsPooled, RewardPool.TotalRelicsPooled));
 
-        _votePanel = new VotePanel();
-        tree.Root.AddChild(_votePanel);
+        DemocracyFlow.Start();
     }
 
     private static void CloseWaitPanel()
@@ -162,10 +163,98 @@ public static class PostCombatPatch
         _waitPanel = null;
     }
 
-    private static void CloseVotePanel()
+    /// <summary>
+    /// Called by VoteManager once the distribution has been applied (host or client).
+    /// Closes any open democracy screens and shows the results summary after a beat.
+    /// </summary>
+    public static void OnDistributionComplete(List<string> results)
     {
-        if (_votePanel != null && GodotObject.IsInstanceValid(_votePanel))
-            _votePanel.QueueFree();
-        _votePanel = null;
+        DemocracyFlow.CloseAll();
+
+        var tree = Engine.GetMainLoop() as SceneTree;
+        if (tree?.Root == null) return;
+
+        var timer = tree.CreateTimer(0.4);
+        timer.Timeout += () =>
+        {
+            try
+            {
+                if (tree.Root == null) return;
+                var panel = new ResultsPanel();
+                panel.SetLines(results, AdvanceFromRewards);
+                tree.Root.AddChild(panel);
+            }
+            catch (Exception e)
+            {
+                MainFile.LogDebug("Democracy: results panel error: " + e.Message);
+            }
+        };
+    }
+
+    /// <summary>
+    /// Replicates what the vanilla reward screen's proceed button does now that we
+    /// suppress it, matching NRewardsScreen.OnProceedButtonPressed:
+    ///   - Boss combat: the vanilla disables the proceed button and marks the local
+    ///     player ready via ActChangeSynchronizer.SetLocalPlayerReady, so the group
+    ///     transitions to the next act together once everyone is ready.
+    ///   - Every other combat: RunManager.ProceedFromTerminalRewardsScreen() (enable
+    ///     travel + open the map).
+    /// The previous version consulted ActChangeSynchronizer.IsWaitingForOtherPlayers(),
+    /// but that is a BOSS-ONLY act-change path — its _readyPlayers list is all-false
+    /// during normal play, so the first player to press Continue marked themselves
+    /// act-ready and waited forever while the second (who saw the first as ready)
+    /// advanced to the map. That was the "host stuck with nothing to click" bug.
+    /// </summary>
+    private static void AdvanceFromRewards()
+    {
+        try
+        {
+            var rm = RunManager.Instance;
+            if (rm == null) return;
+
+            var state = rm.State;
+            var room = state?.CurrentRoom;
+
+            // Boss/victory rooms use the act-change ready gate (matching the vanilla
+            // OnProceedButtonPressed: RoomType == Boss || IsVictoryRoom), EXCEPT the
+            // run's final boss (act 4 / heart), which proceeds directly to the win flow.
+            bool atActBoundary = room != null &&
+                (room.RoomType == RoomType.Boss || room.IsVictoryRoom);
+
+            if (atActBoundary && state != null && room != null && IsFinalBossRoom(state, room))
+                atActBoundary = false;
+
+            if (atActBoundary)
+            {
+                rm.ActChangeSynchronizer?.SetLocalPlayerReady();
+            }
+            else
+            {
+                _ = rm.ProceedFromTerminalRewardsScreen();
+            }
+        }
+        catch (Exception e)
+        {
+            MainFile.LogDebug("Democracy: advance from rewards error: " + e.Message);
+        }
+    }
+
+    /// <summary>True when the current room is the run's final boss — there is a second
+    /// boss map point AND the player is standing on the boss coordinate. Mirrors the
+    /// vanilla OnProceedButtonPressed check (SecondBossMapPoint != null &&
+    /// CurrentMapCoord == BossMapPoint.coord).</summary>
+    private static bool IsFinalBossRoom(RunState state, AbstractRoom room)
+    {
+        try
+        {
+            var map = state.Map;
+            if (map?.SecondBossMapPoint == null) return false;
+            var bossCoord = map.BossMapPoint?.coord;
+            if (bossCoord == null) return false;
+            var cur = state.CurrentMapCoord;
+            if (!cur.HasValue) return false;
+            return cur.Value.col == bossCoord.Value.col && cur.Value.row == bossCoord.Value.row;
+        }
+        catch { return false; }
     }
 }

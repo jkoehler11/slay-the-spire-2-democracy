@@ -1,16 +1,42 @@
 <Project>
+    <!--
+      GodotPath — the MegaDot (MegaCrit's Godot 4.5.1 mono) editor binary. It is used ONLY
+      by `dotnet publish` to pack asset/localization changes into <Mod>.pck. It is NOT used
+      by `dotnet build`, so a code-only build works with no Godot editor installed.
+
+      The .pck must be packed with a MegaDot editor matching the game's engine version
+      (currently 4.5.1.m.14) or the game rejects it. The per-OS defaults below assume the
+      editor lives at a conventional location; if yours is elsewhere, override it WITHOUT
+      editing this file, using whichever of these works for you:
+
+        1. Command line:  dotnet publish -p:GodotPath="/abs/path/to/MegaDot"
+        2. A `local.props` file next to this one (gitignored, auto-imported below).
+           Put in it:
+             <Project><PropertyGroup>
+               <GodotPath>/abs/path/to/MegaDot</GodotPath>
+               <Sts2Path>/abs/path/to/Slay the Spire 2</Sts2Path>
+             </PropertyGroup></Project>
+        3. Editing the default for your OS below (only if the shipped default is wrong for
+           everyone, not just for you).
+    -->
     <PropertyGroup>
-        <!-- MegaDot / Godot 4.5.1 mono executable for export-pack when publishing -->
-        <GodotPath>/home/james/megadot/MegaDot_v4.5.1-stable_mono_linux.x86_64</GodotPath>
+        <!-- Windows -->
+        <GodotPath Condition="$([MSBuild]::IsOSPlatform('Windows'))">C:/megadot/MegaDot_v4.5.1-stable_mono_win64.exe</GodotPath>
+        <!-- Linux -->
+        <GodotPath Condition="$([MSBuild]::IsOSPlatform('Linux'))">$(HOME)/megadot/MegaDot_v4.5.1-stable_mono_linux.x86_64</GodotPath>
+        <!-- macOS -->
+        <GodotPath Condition="$([MSBuild]::IsOSPlatform('OSX'))">$(HOME)/Applications/Megadot.app/Contents/MacOS/Godot</GodotPath>
 
-        <!-- If STS2 is not found automatically, uncomment and set manually -->
-        <!-- <Sts2Path>?/steamapps/common/Slay the Spire 2</Sts2Path> -->
-
-        <!-- Allow unsafe blocks for direct memory access if needed -->
+        <!-- STS2 install location is auto-discovered by Sts2PathDiscovery.props. If discovery
+             fails on your machine, override via -p:Sts2Path=... or a `local.props` file. -->
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <PublicizeSts>true</PublicizeSts>
 
-        <!-- Disable architecture mismatch warning; mods are built as MSIL -->
+        <!-- Mods are built as MSIL targeting all platforms; your local sts2.dll is for your
+             own platform, so the architecture-mismatch warning is expected and harmless. -->
         <NoWarn>$(NoWarn);MSB3270</NoWarn>
     </PropertyGroup>
+
+    <!-- Per-developer overrides (never committed). -->
+    <Import Project="local.props" Condition="Exists('local.props')" />
 </Project>

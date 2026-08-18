@@ -1,12 +1,8 @@
 using BaseLib.Abstracts;
 using DemocracyMod.DemocracyModCode;
-using MegaCrit.Sts2.Core.Entities.Players;
-using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Platform;
 using MegaCrit.Sts2.Core.Platform.Steam;
 using MegaCrit.Sts2.Core.Runs;
-using MegaCrit.Sts2.Core.Combat;
-using HarmonyLib;
 
 namespace DemocracyMod.DemocracyModCode.Networking;
 
@@ -20,19 +16,55 @@ public static class MultiplayerCoordinator
         if (ns != null) CustomMessageWrapper.Send(msg, ns);
     }
 
-    public static void SendClaim(int goldAmount, List<string> rewardIds)
-        => Send(new DemocracyClaimMessage { GoldAmount = goldAmount, RewardIds = rewardIds });
+    /// <summary>A player's vote for one stage (gold mode or reward ids).</summary>
+    public static void SendStage(int stage, int goldMode, List<string> rewardIds)
+        => Send(new DemocracyStageMessage { Stage = stage, GoldMode = goldMode, RewardIds = rewardIds });
 
-    public static void SendPoolDistributed() => Send(new DemocracyPoolDistributedMessage());
+    /// <summary>Host: every player has voted — advance everyone to the next stage.</summary>
+    public static void SendAdvance(int nextStage)
+        => Send(new DemocracyAdvanceMessage { NextStage = nextStage });
 
-    internal static void HandleClaim(ulong senderId, DemocracyClaimMessage msg)
-    {
-        VoteManager.SubmitClaim(senderId, msg.GoldAmount, msg.RewardIds);
-    }
+    public static void SendResolved(VoteManager.Resolution r)
+        => Send(new DemocracyResolvedMessage
+        {
+            EntryIds = r.EntryIds,
+            WinnerIds = r.WinnerIds,
+            ReclaimPlayerIds = r.ReclaimPlayerIds,
+            ReclaimAmounts = r.ReclaimAmounts,
+            GoldPlayerIds = r.GoldPlayerIds,
+            GoldAmounts = r.GoldAmounts,
+            GoldMode = r.GoldMode,
+        });
+
+    internal static void HandleStage(ulong senderId, DemocracyStageMessage msg)
+        => VoteManager.SubmitStage(senderId, msg.Stage, msg.GoldMode, msg.RewardIds);
+
+    internal static void HandleAdvance(ulong senderId, DemocracyAdvanceMessage msg)
+        => VoteManager.AdvanceTo(msg.NextStage);
+
+    internal static void HandleResolved(ulong senderId, DemocracyResolvedMessage msg)
+        => VoteManager.ApplyResolved(msg);
 
     public static void InitializeForRun()
     {
-        var pt = (SteamInitializer.Initialized && !MegaCrit.Sts2.Core.Helpers.CommandLineHelper.HasArg("fastmp")) ? PlatformType.Steam : PlatformType.None;
+        var pt = (SteamInitializer.Initialized && !MegaCrit.Sts2.Core.Helpers.CommandLineHelper.HasArg("fastmp"))
+            ? PlatformType.Steam : PlatformType.None;
         LocalPlayerId = PlatformUtil.GetLocalPlayerId(pt);
+    }
+
+    /// <summary>True if this machine controls the first player in the run (the host).</summary>
+    public static bool IsHost
+    {
+        get
+        {
+            if (LocalPlayerId == 0) InitializeForRun();
+            try
+            {
+                var players = RunManager.Instance?.State?.Players;
+                if (players == null || players.Count == 0) return false;
+                return players[0].NetId == LocalPlayerId;
+            }
+            catch { return false; }
+        }
     }
 }

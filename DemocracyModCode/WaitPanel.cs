@@ -3,20 +3,36 @@ using Godot;
 namespace DemocracyMod.DemocracyModCode;
 
 /// <summary>
-/// Non-blocking overlay shown while waiting for other players to finish.
-/// All controls use MouseFilter.Ignore so clicks pass through to the
-/// reward screen underneath — purely informational.
+/// Non-blocking overlay shown while waiting for other players (either still picking,
+/// or casting their vote). All controls use MouseFilter.Ignore so clicks pass through
+/// to whatever is underneath — purely informational.
 /// </summary>
 public partial class WaitPanel : CanvasLayer
 {
     private int _ticks;
     private Label _dots = null!;
+    private string _titleText = "";
+    private string _subtitleText = "";
+
+    /// <summary>Optional override of the banner text. Pass null to keep a default.</summary>
+    public void Configure(string? title, string? subtitle)
+    {
+        if (title != null) _titleText = title;
+        if (subtitle != null) _subtitleText = subtitle;
+    }
+
+    private string TitleText => string.IsNullOrEmpty(_titleText)
+        ? MainFile.Loc("DemocracyMod.WaitPanel.Title", "WAITING FOR PLAYERS")
+        : _titleText;
+
+    private string SubtitleBase => string.IsNullOrEmpty(_subtitleText)
+        ? MainFile.Loc("DemocracyMod.WaitPanel.Subtitle", "Waiting for all players to finish selecting rewards")
+        : _subtitleText;
 
     public override void _Ready()
     {
         Layer = 99;
 
-        // Non-blocking backdrop — MouseFilter.Ignore lets clicks through
         var bg = new ColorRect
         {
             Color = new Color(0, 0, 0, 0.35f),
@@ -26,8 +42,6 @@ public partial class WaitPanel : CanvasLayer
         };
         AddChild(bg);
 
-        // Top-center banner (not full-screen center, so it doesn't cover the
-        // reward cards in the middle of the screen)
         var banner = new PanelContainer
         {
             Position = new Vector2(
@@ -47,7 +61,7 @@ public partial class WaitPanel : CanvasLayer
 
         var title = new Label
         {
-            Text = MainFile.Loc("DemocracyMod.WaitPanel.Title", "WAITING FOR PLAYERS"),
+            Text = TitleText,
             HorizontalAlignment = HorizontalAlignment.Center,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
@@ -57,7 +71,7 @@ public partial class WaitPanel : CanvasLayer
 
         _dots = new Label
         {
-            Text = MainFile.Loc("DemocracyMod.WaitPanel.Subtitle", "Waiting for all players to finish selecting rewards"),
+            Text = SubtitleBase,
             HorizontalAlignment = HorizontalAlignment.Center,
             MouseFilter = Control.MouseFilterEnum.Ignore,
         };
@@ -66,8 +80,6 @@ public partial class WaitPanel : CanvasLayer
         box.AddChild(_dots);
 
         banner.AddChild(box);
-
-        MainFile.LogVote("Democracy: WaitPanel shown (non-blocking).");
     }
 
     public override void _Process(double delta)
@@ -76,8 +88,7 @@ public partial class WaitPanel : CanvasLayer
         if (_ticks % 30 == 0)
         {
             var dots = (_ticks / 30) % 4;
-            _dots.Text = MainFile.Loc("DemocracyMod.WaitPanel.Subtitle", "Waiting for all players to finish selecting rewards")
-                + new string('.', dots);
+            _dots.Text = SubtitleBase + new string('.', dots);
         }
     }
 }

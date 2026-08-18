@@ -130,6 +130,20 @@ public static class RewardPool
         }
     }
 
+    /// <summary>
+    /// Drain ALL captured grants of a type for a player (used for card rewards, where
+    /// every option card is granted and must be pooled as a separate entry).
+    /// </summary>
+    public static List<object> TakeAllPendingGrants(ulong playerId, PoolEntry.RewardType type)
+    {
+        lock (GrantLock)
+        {
+            var matches = PendingGrants.Where(x => x.PlayerId == playerId && x.Type == type).ToList();
+            foreach (var g in matches) PendingGrants.Remove(g);
+            return matches.Select(g => g.Model).ToList();
+        }
+    }
+
     public static void AddGoldReward(ulong sourceId, int amount)
     {
         lock (LockObj)
@@ -300,28 +314,19 @@ public static class RewardPool
     }
 
 
-    public static void DistributeEvenly()
+    /// <summary>
+    /// Reset the per-player win tally used for tie-break fairness. Called at the start
+    /// of every claim resolution so the tie-break is deterministic regardless of run
+    /// history — a single earlier divergence must not compound into every later combat.
+    /// </summary>
+    public static void ResetWinCounts()
     {
-        var pending = GetPending();
-        var playerIds = CombatRewardPatch.GetSeenPlayerIds();
-        if (playerIds.Count == 0 || pending.Count == 0) return;
-
-        var playerIndex = 0;
-        foreach (var entry in pending)
-        {
-            var winner = playerIds[playerIndex % playerIds.Count];
-            MarkDistributed(entry.Id, winner);
-            if (entry.Type == PoolEntry.RewardType.GoldPile)
-                GrantGold(winner, entry.GoldAmount);
-            MainFile.LogVote(string.Format("Democracy: Distributed {0} from P{1} -> P{2}",
-                entry.DisplayName, entry.SourcePlayerId, winner));
-            playerIndex++;
-        }
+        lock (LockObj) PlayerWinCount.Clear();
     }
 
     public static void Clear()
     {
-        lock (LockObj) { Entries.Clear(); _totalGoldPooled = 0; _totalCardsPooled = 0; _totalPotionsPooled = 0; _totalRelicsPooled = 0; PoolSeq.Clear(); }
+        lock (LockObj) { Entries.Clear(); _totalGoldPooled = 0; _totalCardsPooled = 0; _totalPotionsPooled = 0; _totalRelicsPooled = 0; PoolSeq.Clear(); PlayerWinCount.Clear(); }
         lock (GrantLock) PendingGrants.Clear();
         IsRewardPhaseActive = false;
     }

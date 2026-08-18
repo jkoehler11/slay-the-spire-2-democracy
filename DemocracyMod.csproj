@@ -56,7 +56,7 @@
     </ItemGroup>
 
     <Target Name="CheckDependencyPaths">
-        <Error Text="Slay the Spire 2 data not found at path '$(Sts2DataDir)'"
+        <Error Text="Slay the Spire 2 data not found at path '$(Sts2DataDir)'. Set Sts2Path via -p:Sts2Path=&quot;...&quot; or a local.props file (see Sts2PathDiscovery.props)."
                Condition="'$(Sts2DataDir)' == '' or !Exists('$(Sts2DataDir)')" />
     </Target>
 
@@ -99,7 +99,7 @@
     </Target>
 
     <Target Name="NeedGodotForPublish" BeforeTargets="Publish">
-        <Error Text="Godot path must be set up before publishing."
+        <Error Text="Godot not found at path '$(GodotPath)'. Publish needs the MegaDot editor to pack the .pck - set GodotPath via -p:GodotPath=&quot;...&quot; or a local.props file (see Directory.Build.props)."
                Condition="'$(GodotPath)' == '' or !Exists('$(GodotPath)')" />
     </Target>
 

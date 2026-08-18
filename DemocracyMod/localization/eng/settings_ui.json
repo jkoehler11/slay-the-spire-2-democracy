@@ -1,9 +1,7 @@
 {
   "DEMOCRACYMOD-GAMEPLAY.title": "Gameplay",
   "DEMOCRACYMOD-LOGGING.title": "Logging",
-  "DEMOCRACYMOD-VOTE_TIMEOUT_SECONDS.title": "Vote Timeout (seconds)",
   "DEMOCRACYMOD-SHOP_DEMOCRACY.title": "Shop Democracy",
-  "DEMOCRACYMOD-AUTO_PICK_REWARDS.title": "Auto-Pick Rewards",
   "DEMOCRACYMOD-SHOP_REDISTRIBUTE.title": "Redistribute Shop Gold",
   "DEMOCRACYMOD-REWARD_SELECTION.title": "Reward Selection",
   "DEMOCRACYMOD-REWARD_SELECTION.hover.desc": "How combat rewards are selected, and what happens to rewards nobody claims.",

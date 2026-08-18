@@ -5,36 +5,127 @@ using MegaCrit.Sts2.Core.Logging;
 
 namespace DemocracyMod.DemocracyModCode.Networking;
 
-public sealed class DemocracyClaimMessage : ICustomMessage
+/// <summary>
+/// One player's vote for a single stage of the synchronized reward flow.
+/// Stage 0 (gold) carries a GoldMode; stages 1-3 carry the reward entry ids the
+/// player wants (potions / relics / cards). The host collects these and, once
+/// every player has voted for the current stage, broadcasts a
+/// DemocracyAdvanceMessage so everyone advances together.
+/// </summary>
+public sealed class DemocracyStageMessage : ICustomMessage
 {
-    public int GoldAmount;
+    public int Stage;
+    public int GoldMode = -1;              // GoldVoteMode for stage 0, -1 otherwise
     public List<string> RewardIds = new();
+
+    public bool ShouldBroadcast => true;
+    public NetTransferMode Mode => NetTransferMode.Reliable;
+    public LogLevel LogLevel => LogLevel.Debug;
+
+    public void Serialize(PacketWriter w)
+    {
+        w.WriteInt(Stage);
+        w.WriteInt(GoldMode);
+        w.WriteInt(RewardIds.Count);
+        foreach (var id in RewardIds) w.WriteString(id);
+    }
+
+    public void Deserialize(PacketReader r)
+    {
+        Stage = r.ReadInt();
+        GoldMode = r.ReadInt();
+        var c = r.ReadInt();
+        RewardIds = new(c);
+        for (var i = 0; i < c; i++) RewardIds.Add(r.ReadString());
+    }
+
+    public void HandleMessage(ulong senderId) => MultiplayerCoordinator.HandleStage(senderId, this);
+}
+
+/// <summary>
+/// Host broadcast: every player has voted for the current stage, so everyone
+/// advances to the next stage's screen. After the final stage (cards) the host
+/// instead broadcasts the DemocracyResolvedMessage.
+/// </summary>
+public sealed class DemocracyAdvanceMessage : ICustomMessage
+{
+    public int NextStage;
+
+    public bool ShouldBroadcast => true;
+    public NetTransferMode Mode => NetTransferMode.Reliable;
+    public LogLevel LogLevel => LogLevel.Debug;
+
+    public void Serialize(PacketWriter w) => w.WriteInt(NextStage);
+    public void Deserialize(PacketReader r) => NextStage = r.ReadInt();
+    public void HandleMessage(ulong senderId) => MultiplayerCoordinator.HandleAdvance(senderId, this);
+}
+
+/// <summary>
+/// The HOST's authoritative distribution decision, broadcast after the final stage.
+/// Carries the exact winner for each non-gold reward and the exact gold
+/// reclaims/grants, so every client applies the SAME transfers instead of resolving
+/// independently. WinnerId 0 means "discarded".
+/// </summary>
+public sealed class DemocracyResolvedMessage : ICustomMessage
+{
+    // Non-gold rewards (parallel arrays). WinnerId 0 == discarded.
+    public List<string> EntryIds = new();
+    public List<ulong> WinnerIds = new();
+
+    // Gold reclaims (parallel arrays) — amount taken back from each source.
+    public List<ulong> ReclaimPlayerIds = new();
+    public List<int> ReclaimAmounts = new();
+
+    // Gold grants (parallel arrays) — amount given to each player.
+    public List<ulong> GoldPlayerIds = new();
+    public List<int> GoldAmounts = new();
+
+    // The winning gold mode (GoldVoteMode as int), for the results UI.
+    public int GoldMode = (int)DemocracyModCode.GoldVoteMode.OriginalAmount;
+
     public bool ShouldBroadcast => true;
     public NetTransferMode Mode => NetTransferMode.Reliable;
     public LogLevel LogLevel => LogLevel.Info;
 
     public void Serialize(PacketWriter w)
     {
-        w.WriteInt(GoldAmount);
-        w.WriteInt(RewardIds.Count);
-        foreach (var id in RewardIds) w.WriteString(id);
+        w.WriteInt(EntryIds.Count);
+        foreach (var id in EntryIds) w.WriteString(id);
+        foreach (var wid in WinnerIds) w.WriteULong(wid);
+
+        w.WriteInt(ReclaimPlayerIds.Count);
+        foreach (var pid in ReclaimPlayerIds) w.WriteULong(pid);
+        foreach (var amt in ReclaimAmounts) w.WriteInt(amt);
+
+        w.WriteInt(GoldPlayerIds.Count);
+        foreach (var pid in GoldPlayerIds) w.WriteULong(pid);
+        foreach (var amt in GoldAmounts) w.WriteInt(amt);
+
+        w.WriteInt(GoldMode);
     }
+
     public void Deserialize(PacketReader r)
     {
-        GoldAmount = r.ReadInt();
         var c = r.ReadInt();
-        RewardIds = new(c);
-        for (var i = 0; i < c; i++) RewardIds.Add(r.ReadString());
-    }
-    public void HandleMessage(ulong senderId) => MultiplayerCoordinator.HandleClaim(senderId, this);
-}
+        EntryIds = new(c);
+        WinnerIds = new(c);
+        for (var i = 0; i < c; i++) EntryIds.Add(r.ReadString());
+        for (var i = 0; i < c; i++) WinnerIds.Add(r.ReadULong());
 
-public sealed class DemocracyPoolDistributedMessage : ICustomMessage
-{
-    public bool ShouldBroadcast => true;
-    public NetTransferMode Mode => NetTransferMode.Reliable;
-    public LogLevel LogLevel => LogLevel.Info;
-    public void Serialize(PacketWriter w) { }
-    public void Deserialize(PacketReader r) { }
-    public void HandleMessage(ulong senderId) { }
+        c = r.ReadInt();
+        ReclaimPlayerIds = new(c);
+        ReclaimAmounts = new(c);
+        for (var i = 0; i < c; i++) ReclaimPlayerIds.Add(r.ReadULong());
+        for (var i = 0; i < c; i++) ReclaimAmounts.Add(r.ReadInt());
+
+        c = r.ReadInt();
+        GoldPlayerIds = new(c);
+        GoldAmounts = new(c);
+        for (var i = 0; i < c; i++) GoldPlayerIds.Add(r.ReadULong());
+        for (var i = 0; i < c; i++) GoldAmounts.Add(r.ReadInt());
+
+        GoldMode = r.ReadInt();
+    }
+
+    public void HandleMessage(ulong senderId) => MultiplayerCoordinator.HandleResolved(senderId, this);
 }
