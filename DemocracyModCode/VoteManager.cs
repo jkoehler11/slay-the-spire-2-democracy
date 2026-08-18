@@ -75,13 +75,6 @@ public static class VoteManager
 
     public static void SubmitStage(ulong playerId, int stage, int goldMode, List<string> rewardIds)
     {
-        // Dead players may not vote when DeadCanVote is disabled.
-        if (!DemocracyConfig.DeadCanVote && IsDeadPlayer(playerId))
-        {
-            MainFile.LogVote(string.Format("Democracy: stage {0} vote from P{1} ignored (dead).", stage, playerId));
-            return;
-        }
-
         lock (LockObj)
         {
             if (!_stageVotes.TryGetValue(stage, out var d)) { d = new(); _stageVotes[stage] = d; }
@@ -252,10 +245,8 @@ public static class VoteManager
                 winner = claimants[0];
             else if (claimants.Count > 1)
                 winner = TieBreak(entry.Id, claimants);
-            else if (DemocracyConfig.RewardSelection == RewardSelectionMode.KeepOwnRewards)
-                winner = entry.SourcePlayerId;   // unclaimed — kept by source
             else
-                winner = 0;                       // unclaimed — discarded
+                winner = entry.SourcePlayerId;   // unclaimed — kept by source
 
             resolution.EntryIds.Add(entry.Id);
             resolution.WinnerIds.Add(winner);
@@ -398,16 +389,6 @@ public static class VoteManager
         var label = idx >= 0 ? string.Format("P{0}", idx + 1) : id.ToString();
         if (id == MultiplayerCoordinator.LocalPlayerId) label += " (You)";
         return label;
-    }
-
-    private static bool IsDeadPlayer(ulong playerId)
-    {
-        try
-        {
-            var p = MegaCrit.Sts2.Core.Runs.RunManager.Instance?.State?.GetPlayer(playerId);
-            return p?.Creature?.IsDead == true;
-        }
-        catch { return false; }
     }
 
     private static ulong TieBreak(string rewardId, List<ulong> candidates)

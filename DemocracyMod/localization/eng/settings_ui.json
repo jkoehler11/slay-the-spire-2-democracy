@@ -1,13 +1,7 @@
 {
   "DEMOCRACYMOD-GAMEPLAY.title": "Gameplay",
   "DEMOCRACYMOD-LOGGING.title": "Logging",
-  "DEMOCRACYMOD-REWARD_SELECTION.title": "Reward Selection",
-  "DEMOCRACYMOD-REWARD_SELECTION.hover.desc": "How combat rewards are selected, and what happens to rewards nobody claims.",
-  "DEMOCRACYMOD-REWARD_SELECTION.SelectNoRewards": "Select No Rewards",
-  "DEMOCRACYMOD-REWARD_SELECTION.KeepOwnRewards": "Keep Own Rewards",
-  "DEMOCRACYMOD-REWARD_SELECTION.SelectAllRewards": "Select All Rewards",
   "DEMOCRACYMOD-TIE_BREAK_FAIRNESS.title": "Tie-Break Fairness",
-  "DEMOCRACYMOD-DEAD_CAN_VOTE.title": "Dead Players Can Vote",
   "DEMOCRACYMOD-SHOW_RESULTS_PANEL.title": "Show Results Summary",
   "DEMOCRACYMOD-SHOW_RESULTS_PANEL.hover.desc": "Show what everyone received after each combat. Turn off to advance straight past the summary.",
   "DEMOCRACYMOD-DEBUG_LOGGING.title": "Debug Logging",

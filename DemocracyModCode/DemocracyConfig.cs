@@ -1,26 +1,6 @@
-using System.Text.Json;
 using BaseLib.Config;
 
 namespace DemocracyMod.DemocracyModCode;
-
-/// <summary>
-/// How a player's combat rewards are selected, and what happens to rewards nobody
-/// claims. BaseLib renders enum-typed config properties as a dropdown.
-/// In the event-style claim flow, this also controls the DEFAULT toggle state of
-/// the reward choice buttons (SelectAllRewards pre-checks every button).
-/// </summary>
-public enum RewardSelectionMode
-{
-    /// <summary>Claim nothing by default. The claim screens start empty; unclaimed
-    /// rewards are discarded. "Use it or lose it."</summary>
-    SelectNoRewards,
-    /// <summary>Keep what you earned (default). Unclaimed rewards return to whoever
-    /// earned them instead of being discarded.</summary>
-    KeepOwnRewards,
-    /// <summary>Grab everything. Every reward button starts pre-checked for a
-    /// one-click take-all.</summary>
-    SelectAllRewards,
-}
 
 /// <summary>
 /// How the shared gold pool is distributed. Each player votes for one of three
@@ -43,12 +23,7 @@ public enum GoldVoteMode
 public class DemocracyConfig : SimpleModConfig
 {
     [ConfigSection("Gameplay")]
-    /// <summary>How combat rewards are selected and what happens to unclaimed ones.
-    /// BaseLib renders enum-typed config properties as a dropdown.</summary>
-    [ConfigHoverTip]
-    public static RewardSelectionMode RewardSelection { get; set; } = RewardSelectionMode.KeepOwnRewards;
     [ConfigSlider(0f, 1f, 0.05f)] public static float TieBreakFairness { get; set; } = 0.1f;
-    public static bool DeadCanVote { get; set; } = true;
     /// <summary>Show the post-combat results summary (what everyone received). When
     /// disabled the group advances straight past it after the distribution resolves.</summary>
     [ConfigHoverTip]

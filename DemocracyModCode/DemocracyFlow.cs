@@ -149,8 +149,6 @@ public static class DemocracyFlow
     {
         var entries = RewardPool.GetNonGoldPending().Where(filter).OrderBy(e => e.Id).ToList();
 
-        bool precheck = DemocracyConfig.RewardSelection == RewardSelectionMode.SelectAllRewards;
-
         var options = entries.Select(e => new Option
         {
             Id = e.Id,
@@ -158,7 +156,7 @@ public static class DemocracyFlow
             Description = string.Format(
                 MainFile.Loc("DemocracyMod.Choice.EarnedBy", "Earned by {0}"),
                 VoteManager.PlayerLabel(e.SourcePlayerId)),
-            InitiallySelected = precheck,
+            InitiallySelected = false,
         }).ToList();
 
         ShowScreen(Mode.Multi, title, subtitle, nextLabel, options, ids =>

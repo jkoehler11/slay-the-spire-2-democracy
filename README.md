@@ -40,9 +40,7 @@ simulation. Works with **2–4 players**.
    - Uncontested rewards go to their sole claimant.
    - Contested rewards are tie-broken deterministically (a stable FNV-1a hash over sorted
      player IDs, weighted toward players who have won fewer rewards so far).
-   - Unclaimed rewards resolve per **Reward Selection**: **Keep Own Rewards** (default)
-     returns them to whoever earned them, **Select All Rewards** pre-checks every button
-     for a one-click grab, and **Select No Rewards** discards unclaimed rewards.
+   - Unclaimed rewards return to whoever earned them.
 4. **Transfer** — Cards move via the game's own `CardPileCmd.GiveToAnotherPlayer`; potions
    and relics via discard-then-procure with `PotionCmd`/`RelicCmd`. These are the game's
    own replicated commands, so the deterministic simulation applies them identically on
@@ -105,9 +103,7 @@ Editable in-game via BaseLib `SimpleModConfig`:
 
 | Setting              | Default          | Description                                                       |
 |----------------------|------------------|-------------------------------------------------------------------|
-| Reward Selection     | Keep Own Rewards | Dropdown: Keep Own (default) / Select All / Select No Rewards     |
 | Tie-Break Fairness   | 0.10             | Weight bonus for players who have won fewer rewards               |
-| Dead Can Vote        | ON               | Dead players may still vote for rewards                           |
 | Show Results Summary | ON               | Show what everyone received after each combat (OFF skips it)      |
 
 Logging toggles: **Log All Rewards**, **Log All Votes**, **Log Shop Activity** (all ON),
@@ -209,8 +205,8 @@ slay-the-spire-2-democracy/
    the only shop code logs purchases via `AfterItemPurchased`.
 2. **Shop redistribution** — not implemented. Pooled gold is not redistributed on shop
    exit.
-3. **Dead-player gold** — `DeadCanVote` blocks a dead player's *votes*, but a dead
-   player's pooled gold is still reclaimed and split.
+3. **Dead-player gold** — a dead player's pooled gold is still reclaimed and split even
+   though they can no longer use it.
 4. **No vote timeout** — the claim screens stay open until every player submits, so if a
    player goes AFK mid-flow the group waits indefinitely (the host won't force-resolve).
    Intended; a host-side force-resolve timeout can be added if it becomes a pain point.

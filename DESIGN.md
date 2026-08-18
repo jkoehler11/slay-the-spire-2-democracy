@@ -93,7 +93,7 @@ computes the outcome:
 - **Contested** rewards are tie-broken deterministically: a stable FNV-1a hash over the
   reward id + sorted player ids, weighted toward players who have won fewer rewards
   (configurable via `TieBreakFairness`).
-- **Unclaimed** rewards resolve per the **Reward Selection** setting (see below).
+- **Unclaimed** rewards return to whoever earned them.
 - **Gold** is reclaimed and re-granted per the winning mode.
 
 The host then applies the transfers locally and broadcasts the full decision
@@ -109,16 +109,6 @@ while a boss/victory room drives the group's act-change transition
 `NRewardsScreen.OnProceedButtonPressed` branching — the act-change path is **only** used at
 boss/victory rooms, never gated on `IsWaitingForOtherPlayers()` (whose ready flags are
 all-false outside an act transition and would strand the first player to press Continue).
-
-### 7. Reward Selection Modes
-
-The `RewardSelection` config controls the default toggle state and unclaimed-reward fate:
-
-| Mode            | Button defaults       | Unclaimed rewards                    |
-|-----------------|-----------------------|--------------------------------------|
-| Keep Own Rewards| empty                 | return to whoever earned them        |
-| Select All      | all pre-checked       | (nothing left unclaimed)             |
-| Select No Rewards| empty                | discarded                            |
 
 ## Architecture
 
@@ -174,9 +164,7 @@ Via BaseLib `SimpleModConfig` (editable in-game):
 
 | Setting            | Default          | Purpose                                                    |
 |--------------------|------------------|------------------------------------------------------------|
-| Reward Selection   | Keep Own Rewards | Default toggle state + unclaimed-reward fate               |
 | Tie-Break Fairness | 0.10             | Weight bonus for win-count deficit in contested tie-breaks |
-| Dead Can Vote      | ON               | Whether dead players may vote for rewards                  |
 | Show Results       | ON               | Show the post-combat results summary (OFF skips it)        |
 
 ## Roadmap
@@ -193,7 +181,7 @@ Via BaseLib `SimpleModConfig` (editable in-game):
 | Post-distribution advance      | DONE   |
 | Shop voting                    | TODO   |
 | Shop redistribution            | TODO   |
-| Dead-player gold handling      | PARTIAL (votes blocked; pooled gold still split) |
+| Dead-player gold handling      | PARTIAL (pooled gold still split) |
 | Neow blessing vote             | TODO   |
 
 ## History
