@@ -171,6 +171,12 @@ public static class PostCombatPatch
     {
         DemocracyFlow.CloseAll();
 
+        if (!DemocracyConfig.ShowResultsPanel)
+        {
+            AdvanceFromRewards();
+            return;
+        }
+
         var tree = Engine.GetMainLoop() as SceneTree;
         if (tree?.Root == null) return;
 

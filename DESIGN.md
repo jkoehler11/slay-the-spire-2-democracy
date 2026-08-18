@@ -176,10 +176,8 @@ Via BaseLib `SimpleModConfig` (editable in-game):
 |--------------------|------------------|------------------------------------------------------------|
 | Reward Selection   | Keep Own Rewards | Default toggle state + unclaimed-reward fate               |
 | Tie-Break Fairness | 0.10             | Weight bonus for win-count deficit in contested tie-breaks |
-| Open Voting        | ON               | Log full votes vs. counts only                             |
 | Dead Can Vote      | ON               | Whether dead players may vote for rewards                  |
-| Shop Democracy     | OFF              | *(not yet implemented)*                                    |
-| Shop Redistribute  | OFF              | *(not yet implemented)*                                    |
+| Show Results       | ON               | Show the post-combat results summary (OFF skips it)        |
 
 ## Roadmap
 
@@ -193,7 +191,7 @@ Via BaseLib `SimpleModConfig` (editable in-game):
 | Host-authoritative resolution  | DONE   |
 | Deterministic transfers        | DONE   |
 | Post-distribution advance      | DONE   |
-| Shop voting (`ShopDemocracy`)  | TODO   |
+| Shop voting                    | TODO   |
 | Shop redistribution            | TODO   |
 | Dead-player gold handling      | PARTIAL (votes blocked; pooled gold still split) |
 | Neow blessing vote             | TODO   |

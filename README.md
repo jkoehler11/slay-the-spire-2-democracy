@@ -107,10 +107,8 @@ Editable in-game via BaseLib `SimpleModConfig`:
 |----------------------|------------------|-------------------------------------------------------------------|
 | Reward Selection     | Keep Own Rewards | Dropdown: Keep Own (default) / Select All / Select No Rewards     |
 | Tie-Break Fairness   | 0.10             | Weight bonus for players who have won fewer rewards               |
-| Open Voting          | ON               | Log each player's full vote (OFF = log only counts)               |
 | Dead Can Vote        | ON               | Dead players may still vote for rewards                           |
-| Shop Democracy       | OFF              | *(declared, not yet implemented — see below)*                     |
-| Shop Redistribute    | OFF              | *(declared, not yet implemented — see below)*                     |
+| Show Results Summary | ON               | Show what everyone received after each combat (OFF skips it)      |
 
 Logging toggles: **Log All Rewards**, **Log All Votes**, **Log Shop Activity** (all ON),
 and **Debug Logging** (OFF — enables the verbose DECKVIEW/XFER diagnostics).
@@ -207,10 +205,10 @@ slay-the-spire-2-democracy/
 
 ## Known Gaps
 
-1. **Shop voting (`ShopDemocracy`)** — not implemented. Shop purchases still go through
-   the vanilla flow; the only shop code logs purchases via `AfterItemPurchased`.
-2. **Shop redistribution (`ShopRedistribute`)** — not implemented. Pooled gold is not
-   redistributed on shop exit.
+1. **Shop voting** — not implemented. Shop purchases still go through the vanilla flow;
+   the only shop code logs purchases via `AfterItemPurchased`.
+2. **Shop redistribution** — not implemented. Pooled gold is not redistributed on shop
+   exit.
 3. **Dead-player gold** — `DeadCanVote` blocks a dead player's *votes*, but a dead
    player's pooled gold is still reclaimed and split.
 4. **No vote timeout** — the claim screens stay open until every player submits, so if a

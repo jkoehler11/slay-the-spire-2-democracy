@@ -43,15 +43,16 @@ public enum GoldVoteMode
 public class DemocracyConfig : SimpleModConfig
 {
     [ConfigSection("Gameplay")]
-    public static bool ShopDemocracy { get; set; } = false;
-    public static bool ShopRedistribute { get; set; } = false;
     /// <summary>How combat rewards are selected and what happens to unclaimed ones.
     /// BaseLib renders enum-typed config properties as a dropdown.</summary>
     [ConfigHoverTip]
     public static RewardSelectionMode RewardSelection { get; set; } = RewardSelectionMode.KeepOwnRewards;
     [ConfigSlider(0f, 1f, 0.05f)] public static float TieBreakFairness { get; set; } = 0.1f;
-    public static bool OpenVoting { get; set; } = true;
     public static bool DeadCanVote { get; set; } = true;
+    /// <summary>Show the post-combat results summary (what everyone received). When
+    /// disabled the group advances straight past it after the distribution resolves.</summary>
+    [ConfigHoverTip]
+    public static bool ShowResultsPanel { get; set; } = true;
 
     [ConfigSection("Logging")]
     public static bool DebugLogging { get; set; }

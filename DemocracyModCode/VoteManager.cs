@@ -99,9 +99,8 @@ public static class VoteManager
             }
         }
 
-        if (DemocracyConfig.OpenVoting)
-            MainFile.LogVote(string.Format("Democracy: stage {0} vote from P{1}: goldMode={2} + [{3}]",
-                stage, playerId, goldMode, string.Join(", ", rewardIds)));
+        MainFile.LogVote(string.Format("Democracy: stage {0} vote from P{1}: goldMode={2} + [{3}]",
+            stage, playerId, goldMode, string.Join(", ", rewardIds)));
 
         CheckAdvance(stage);
     }
