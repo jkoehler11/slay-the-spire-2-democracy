@@ -2,6 +2,8 @@
 
 > You didn't earn that relic alone. Now convince everyone you deserve it.
 
+Source & issues: <https://github.com/jkoehler11/slay-the-spire-2-democracy>
+
 **Democracy** turns Slay the Spire 2 multiplayer into a competitive-cooperative
 negotiation game. After each combat, every player picks their own loot first, then the
 group's rewards are pooled and voted on together: anyone can claim any reward, and every
