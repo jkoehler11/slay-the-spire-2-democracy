@@ -166,8 +166,9 @@ engine (currently `4.5.1.m.14` — check the game binary's `--version` after an 
 
 ## Architecture
 
-- **Harmony** postfixes intercept STS2 internals without modifying game code (17 patch
-  targets, all verified against the live `sts2.dll`).
+- **Harmony** patches intercept STS2 internals without modifying game code — 25
+  `[HarmonyPatch]` classes plus one manual transpiler on `RelicCmd.Obtain`, all verified
+  against the live `sts2.dll`).
 - **BaseLib `SpireField`** attaches per-player win counts to `Player` objects.
 - **BaseLib `ICustomMessage`** carries the per-stage votes, the host's advance signal, and
   the host's final decision across the network (`DemocracyStageMessage`,
@@ -252,6 +253,33 @@ slay-the-spire-2-democracy/
 3. **No vote timeout** — the claim screens stay open until every player submits, so if a
    player goes AFK mid-flow the group waits indefinitely (the host won't force-resolve).
    Intended; a host-side force-resolve timeout can be added if it becomes a pain point.
+
+## Publishing to the Steam Workshop
+
+The mod ships on the [Slay the Spire 2 Workshop](https://steamcommunity.com/app/2868840/workshop/)
+via Megacrit's official [mod uploader](https://github.com/megacrit/sts2-mod-uploader)
+(not SteamCMD). Download the release matching your OS, then lay out a workspace:
+
+```
+moduploader/
+    ModUploader            # the uploader binary (commands run from this dir)
+    libsteam_api.so        # (linux) + steam_appid.txt alongside the binary
+    DemocracyMod-workspace/
+        workshop.json      # title, description, visibility, tags, dependencies
+        image.png          # < 1MB preview shown on the Workshop page
+        content/           # the mod files to upload (.json + .dll + .pck)
+```
+
+- `ModUploader new -w <workspace>` scaffolds a fresh workspace.
+- **First upload:** `./ModUploader upload -w <workspace>` — creates a new Workshop item,
+  writes `mod_id.txt` into the workspace, and starts it **private**.
+- **Update:** drop the new files into `content/`, optionally set `changeNote` in
+  `workshop.json`, and re-run the same upload command.
+- `./ModUploader remove -w <workspace>` deletes the item.
+
+`content/` is exactly the built `mods/DemocracyMod/` folder (manifest + `.dll` + `.pck`).
+A Steam client must be running and logged in on the upload machine. Set `visibility` to
+`"public"` (or flip it on the Workshop page) when you're ready to release.
 
 ## License
 
