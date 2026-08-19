@@ -1,5 +1,6 @@
 {
   "DEMOCRACYMOD-COMBAT.title": "Combat",
+  "DEMOCRACYMOD-ANCIENTS.title": "Ancients",
   "DEMOCRACYMOD-GAMEPLAY.title": "Gameplay",
   "DEMOCRACYMOD-LOGGING.title": "Logging",
   "DEMOCRACYMOD-SHOW_GOLD_SCREEN.title": "Show Gold Screen",
@@ -11,7 +12,9 @@
   "DEMOCRACYMOD-SHOW_CARDS_SCREEN.title": "Show Cards Screen",
   "DEMOCRACYMOD-SHOW_CARDS_SCREEN.hover.desc": "Vote on card claims. Off: cards stay with whoever earned them.",
   "DEMOCRACYMOD-SHOW_RESULTS_PANEL.title": "Show Results Summary",
-  "DEMOCRACYMOD-SHOW_RESULTS_PANEL.hover.desc": "Show what everyone received after each combat. Off: advance straight past the summary.",
+  "DEMOCRACYMOD-SHOW_RESULTS_PANEL.hover.desc": "Show what everyone received after each reward encounter. Off: advance straight past the summary.",
+  "DEMOCRACYMOD-ENABLE_ANCIENTS.title": "Enable Ancients",
+  "DEMOCRACYMOD-ENABLE_ANCIENTS.hover.desc": "Pool ancient rewards and vote on who gets what. Off: ancients stay vanilla (each player keeps their own reward).",
   "DEMOCRACYMOD-TIE_BREAK_FAIRNESS.title": "Tie-Break Fairness",
   "DEMOCRACYMOD-DEBUG_LOGGING.title": "Debug Logging",
   "DEMOCRACYMOD-LOG_ALL_REWARDS.title": "Log All Rewards",

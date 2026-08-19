@@ -28,5 +28,9 @@
   "DemocracyMod.Reward.UnknownReward": "Unknown Reward",
   "DemocracyMod.ResultsPanel.Title": "🏆 DISTRIBUTION RESULTS",
   "DemocracyMod.ResultsPanel.Continue": "Continue",
-  "DemocracyMod.Choice.Finish": "Finish"
+  "DemocracyMod.Choice.Finish": "Finish",
+  "DemocracyMod.ConfirmSkip.Title": "Skip Remaining Rewards?",
+  "DemocracyMod.ConfirmSkip.Body": "You still have {0} reward(s) to claim. Skipping will discard them.",
+  "DemocracyMod.ConfirmSkip.Confirm": "Skip Rewards",
+  "DemocracyMod.ConfirmSkip.Cancel": "Cancel"
 }

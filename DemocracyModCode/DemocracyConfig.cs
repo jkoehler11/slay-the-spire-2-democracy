@@ -44,6 +44,12 @@ public class DemocracyConfig : SimpleModConfig
     [ConfigHoverTip]
     public static bool ShowResultsPanel { get; set; } = true;
 
+    [ConfigSection("Ancients")]
+    /// <summary>Pool ancient rewards (Neow, Darv, Orobas, ...) and vote on who gets what.
+    /// When disabled, ancients stay vanilla — each player keeps their own reward.</summary>
+    [ConfigHoverTip]
+    public static bool EnableAncients { get; set; } = true;
+
     [ConfigSection("Gameplay")]
     [ConfigSlider(0f, 1f, 0.05f)] public static float TieBreakFairness { get; set; } = 0.1f;
 

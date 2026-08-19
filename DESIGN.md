@@ -30,8 +30,11 @@ competitive-cooperative negotiation game.
 After every combat (normal, elite, boss), each player selects their own rewards on the
 vanilla loot screen — the normal "pick 1 of 3" for cards, and the usual claims for
 potions, relics, and gold. The mod does **not** auto-pick or suppress this screen. The
-only intervention during this phase is holding the vanilla **Proceed** button while there
-is pooled loot, so a player can't click through to the map before the group vote finishes.
+interventions during this phase are (a) holding the vanilla **Proceed** button while there
+is pooled loot, so a player can't click through to the map before the group vote finishes,
+and (b) intercepting the loot screen's **Skip** button so it declines every remaining
+reward (never grants or pools them) instead of advancing — with a `ConfirmSkipPanel`
+confirmation shown only when unclaimed rewards remain.
 
 ### 2. Reward Pooling
 
@@ -136,7 +139,7 @@ live `sts2.dll`):
 
 ### Networking
 
-Three binary messages (STS2 `PacketWriter`/`PacketReader` via BaseLib `ICustomMessage`):
+Four binary messages (STS2 `PacketWriter`/`PacketReader` via BaseLib `ICustomMessage`):
 
 - `DemocracyStageMessage` — a player's vote for one stage: the stage index, a gold mode
   (stage 0 only), and the reward entry ids they want (stages 1–3). Broadcast to everyone.
@@ -146,6 +149,8 @@ Three binary messages (STS2 `PacketWriter`/`PacketReader` via BaseLib `ICustomMe
 - `DemocracyResolvedMessage` — the host's authoritative decision after the final stage:
   per-entry winner ids (0 = discarded), gold reclaim/grant lists, and the winning gold
   mode. Broadcast to everyone; clients apply it verbatim.
+- `DemocracyConfigMessage` — the host's gameplay config snapshot, broadcast once at run
+  launch so every machine follows the host's settings (6 bools + `TieBreakFairness`).
 
 ### Determinism Rules
 
@@ -157,9 +162,10 @@ Every decision the host makes must be byte-identical on every machine. The mod e
 - host-authoritative resolution (clients never resolve independently),
 - deterministic stage skipping (a page is skipped on every machine only when its pool is
   empty on every machine),
-- matching config across machines (the per-screen show toggles are read on every machine,
-  so all players must use identical Combat-section settings, or they will disagree about
-  which pages to show and desync).
+- host-authoritative config (at run launch the host broadcasts its gameplay settings via
+  `DemocracyConfigMessage`; every machine reads those values through the `HostConfig`
+  effective layer, so a client's own local settings never diverge the flow). Logging flags
+  stay local — verbosity only, no gameplay effect.
 
 ## Configuration
 
@@ -172,10 +178,14 @@ Via BaseLib `SimpleModConfig` (editable in-game):
 | Show Relics Screen | ON               | Vote on relic claims. OFF: relics stay with their earner.  |
 | Show Cards Screen  | ON               | Vote on card claims. OFF: cards stay with their earner.    |
 | Show Results       | ON               | Show the post-combat results summary (OFF skips it)        |
+| Enable Ancients    | ON               | Pool ancient rewards (Neow, Darv, Orobas, …) and vote on them |
 | Tie-Break Fairness | 0.10             | Weight bonus for win-count deficit in contested tie-breaks |
 
 The four show-screen toggles live in a **Combat** section; the results summary toggle also
-moved there. A disabled screen's rewards are simply kept by whoever earned them.
+moved there; **Enable Ancients** lives in its own **Ancients** section. A disabled screen's
+rewards are simply kept by whoever earned them. All **Combat**/**Ancients**/**Gameplay**
+settings are **host-authoritative** — the host broadcasts them at run launch and clients
+follow the host's values (only the **Logging** toggles are per-machine).
 
 ## Roadmap
 
@@ -189,6 +199,9 @@ moved there. A disabled screen's rewards are simply kept by whoever earned them.
 | Host-authoritative resolution  | DONE   |
 | Deterministic transfers        | DONE   |
 | Post-distribution advance      | DONE   |
+| Ancient reward pooling         | DONE   |
+| Skip-all-rewards on loot screen| DONE   |
+| Host-authoritative config sync | DONE   |
 | Shop voting                    | TODO   |
 | Shop redistribution            | TODO   |
 | Dead-player gold handling      | PARTIAL (pooled gold still split) |

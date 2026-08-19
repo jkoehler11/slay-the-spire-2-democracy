@@ -64,6 +64,15 @@ public static class RewardPool
     /// <summary>Only capture reward grants during the reward phase (not run-start or combat).</summary>
     public static volatile bool IsRewardPhaseActive;
 
+    /// <summary>Capture reward grants during a non-shared ancient event (ancients have no RewardsSet).</summary>
+    public static volatile bool IsAncientRewardPhaseActive;
+
+    /// <summary>True from DemocracyFlow.Start until the distribution completes. Set
+    /// deterministically on BOTH machines (at flow start) so the transfer's synced
+    /// RelicCmd.Obtain suppresses its on-obtain effect on the client too — not just the
+    /// host. Relic effects are deferred and fired after the flow, on the owner's machine.</summary>
+    public static volatile bool IsDemocracyFlowActive;
+
     public static int TotalGoldPooled => _totalGoldPooled;
     public static int TotalCardsPooled => _totalCardsPooled;
     public static int TotalPotionsPooled => _totalPotionsPooled;
@@ -329,6 +338,8 @@ public static class RewardPool
         lock (LockObj) { Entries.Clear(); _totalGoldPooled = 0; _totalCardsPooled = 0; _totalPotionsPooled = 0; _totalRelicsPooled = 0; PoolSeq.Clear(); PlayerWinCount.Clear(); }
         lock (GrantLock) PendingGrants.Clear();
         IsRewardPhaseActive = false;
+        IsAncientRewardPhaseActive = false;
+        IsDemocracyFlowActive = false;
     }
 
 

@@ -79,6 +79,7 @@ public static class DemocracyFlow
     {
         if (_started) return;
         _started = true;
+        RewardPool.IsDemocracyFlowActive = true;
         MultiplayerCoordinator.InitializeForRun();
         VoteManager.BeginFlow();
 
@@ -107,10 +108,10 @@ public static class DemocracyFlow
     /// with whoever earned them (the stage is skipped like an empty one).</summary>
     public static bool HasLootForStage(int stage) => stage switch
     {
-        StageGold => DemocracyConfig.ShowGoldScreen && RewardPool.TotalGoldPooled > 0,
-        StagePotions => DemocracyConfig.ShowPotionsScreen && RewardPool.GetNonGoldPending().Any(e => e.Type == RewardPool.PoolEntry.RewardType.Potion),
-        StageRelics => DemocracyConfig.ShowRelicsScreen && RewardPool.GetNonGoldPending().Any(e => e.Type is RewardPool.PoolEntry.RewardType.Relic or RewardPool.PoolEntry.RewardType.BossRelic),
-        StageCards => DemocracyConfig.ShowCardsScreen && RewardPool.GetNonGoldPending().Any(e => e.Type == RewardPool.PoolEntry.RewardType.CardReward),
+        StageGold => HostConfig.ShowGoldScreen && RewardPool.TotalGoldPooled > 0,
+        StagePotions => HostConfig.ShowPotionsScreen && RewardPool.GetNonGoldPending().Any(e => e.Type == RewardPool.PoolEntry.RewardType.Potion),
+        StageRelics => HostConfig.ShowRelicsScreen && RewardPool.GetNonGoldPending().Any(e => e.Type is RewardPool.PoolEntry.RewardType.Relic or RewardPool.PoolEntry.RewardType.BossRelic),
+        StageCards => HostConfig.ShowCardsScreen && RewardPool.GetNonGoldPending().Any(e => e.Type == RewardPool.PoolEntry.RewardType.CardReward),
         _ => false,
     };
 

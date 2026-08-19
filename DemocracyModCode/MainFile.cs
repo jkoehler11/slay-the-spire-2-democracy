@@ -41,6 +41,7 @@ public partial class MainFile : Node
         
         Harmony harmony = new(ModId);
         harmony.PatchAll();
+        RelicEffectGate.Patch(harmony);
         var patched = harmony.GetPatchedMethods().ToList();
         Logger.Info(string.Format("Harmony patches applied: {0} methods", patched.Count));
         foreach (var m in patched)

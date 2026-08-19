@@ -4,6 +4,7 @@ using MegaCrit.Sts2.Core.Nodes.Events;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.Screens;
+using MegaCrit.Sts2.Core.Nodes.Screens.Overlays;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 using DemocracyMod.DemocracyModCode;
@@ -58,6 +59,62 @@ public static class NativeUiPatch
             // (HasPending false) the vanilla Proceed stays intact.
             if (CombatRewardPatch.IsDemocracyActive && RewardPool.HasPending)
                 return false;
+            return true;
+        }
+    }
+
+
+    [HarmonyPatch(typeof(NRewardsScreen), nameof(NRewardsScreen.OnProceedButtonPressed))]
+    public static class ConfirmSkipRemainingRewards
+    {
+        [HarmonyPrefix]
+        static bool Prefix(NRewardsScreen __instance)
+        {
+            if (!CombatRewardPatch.IsDemocracyActive) return true;
+            if (!__instance._isTerminal) return true;   // non-combat: vanilla decline-and-close
+
+            int remaining = __instance._rewardButtons?.Count ?? 0;
+
+            // "Skip" (rewards still unclaimed): decline them and complete the local set
+            // instead of advancing to the map, but only after a confirmation.
+            if (remaining > 0)
+            {
+                var screen = __instance;
+                ConfirmSkipPanel.Show(remaining, () =>
+                {
+                    try
+                    {
+                        var rm = RunManager.Instance;
+                        if (rm == null)
+                        {
+                            MainFile.LogDebug("Democracy: skip — no RunManager.");
+                            return;
+                        }
+                        var sync = rm.RewardsSetSynchronizer;
+                        if (sync == null)
+                        {
+                            MainFile.LogDebug("Democracy: skip — no RewardsSetSynchronizer.");
+                            return;
+                        }
+                        sync.SkipLocalRewardsSet();
+                        var stack = NOverlayStack.Instance;
+                        if (stack != null)
+                            stack.Remove(screen);
+                    }
+                    catch (Exception e)
+                    {
+                        MainFile.LogDebug("Democracy: skip remaining rewards error: " + e.Message);
+                    }
+                });
+                return false;
+            }
+
+            // "Proceed" (everything already claimed): hold the advance while the group's
+            // pooled loot has not yet been voted on — the claim flow + AdvanceFromRewards
+            // drive progression instead.
+            if (RewardPool.HasPending)
+                return false;
+
             return true;
         }
     }

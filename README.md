@@ -16,7 +16,9 @@ simulation. Works with **2–4 players**.
    vanilla loot screen, exactly as in an unmodded run: the normal "pick 1 of 3" for cards,
    and the usual claims for potions, relics, and gold. Nothing is auto-picked and nothing
    is hidden. The vanilla **Proceed** button is held back while there is pooled loot so
-   nobody can skip ahead before the vote finishes.
+   nobody can skip ahead before the vote finishes. The loot screen's **Skip** button
+   declines every remaining reward instead of advancing — with a confirmation when any
+   rewards are still unclaimed — and declined rewards are neither granted nor pooled.
 2. **Pool & vote** — Once every player has finished picking, the rewards are pooled and
    tagged with who earned them, and the group walks through up to four pages, one reward
    category at a time. Every page uses the game's native event-choice buttons (large title
@@ -32,8 +34,10 @@ simulation. Works with **2–4 players**.
    - **Cards.** The card(s) each player actually selected — a "pick 1 of 3" contributes
      exactly one card (the chosen one), not all three options. Toggle **0 to N**, then
      **Finish**.
-   - Non-combat rewards (events, shops, ancients) are never pooled — you pick those
-     normally.
+   - Non-combat rewards are normally never pooled — events and shops stay vanilla. The
+     exception is **ancients** (Neow, Darv, Orobas, …): those rewards *are* pooled and
+     voted on, and can be turned off with the **Ancients** → **Enable Ancients** setting
+     (when off, each player keeps their own ancient reward).
 3. **Distribute (host-authoritative)** — After the cards page, the host (the first player
    in the run) alone computes the outcome, applies the transfers, and broadcasts the
    decision. Clients apply the identical result rather than resolving on their own, so
@@ -112,6 +116,12 @@ Editable in-game via BaseLib `SimpleModConfig`, grouped into sections.
 | Show Cards Screen    | ON      | Vote on card claims. OFF: cards stay with whoever earned them.       |
 | Show Results Summary | ON      | Show what everyone received after each combat (OFF skips it)         |
 
+**Ancients**:
+
+| Setting          | Default | Description                                              |
+|------------------|---------|----------------------------------------------------------|
+| Enable Ancients  | ON      | Pool ancient rewards (Neow, Darv, Orobas, …) and vote on them |
+
 **Gameplay**:
 
 | Setting            | Default | Description                                          |
@@ -121,9 +131,11 @@ Editable in-game via BaseLib `SimpleModConfig`, grouped into sections.
 Logging toggles: **Log All Rewards**, **Log All Votes**, **Log Shop Activity** (all ON),
 and **Debug Logging** (OFF — enables the verbose DECKVIEW/XFER diagnostics).
 
-> All players in a multiplayer run should use identical **Combat** section settings. The
-> per-screen toggles are read independently on every machine, so a host/client mismatch
-> will make the machines disagree about which pages to show and stall or desync the run.
+**Combat** and **Ancients** settings are **host-authoritative**: at run launch the host
+broadcasts its settings to every client, and the whole group follows the host's values
+regardless of what each player has configured locally. Only the **Logging** toggles stay
+local (they control per-machine log verbosity, never gameplay). If the host changes a
+setting mid-run, clients keep the launch-time snapshot until the next run.
 
 ## Localization
 
@@ -149,7 +161,7 @@ engine (currently `4.5.1.m.14` — check the game binary's `--version` after an 
 - **BaseLib `SpireField`** attaches per-player win counts to `Player` objects.
 - **BaseLib `ICustomMessage`** carries the per-stage votes, the host's advance signal, and
   the host's final decision across the network (`DemocracyStageMessage`,
-  `DemocracyAdvanceMessage`, `DemocracyResolvedMessage`).
+  `DemocracyAdvanceMessage`, `DemocracyResolvedMessage`, `DemocracyConfigMessage`).
 - **Host-authoritative resolution** — the host (first player in the run) is the single
   resolver. It collects each player's per-stage votes, advances the group when every
   player has voted, and (after the cards stage) picks winners and broadcasts them; clients
@@ -195,17 +207,22 @@ slay-the-spire-2-democracy/
         VoteManager.cs                 - Stage coordinator + host-authoritative resolution
         DemocracyFlow.cs               - Drives the four synchronized claim pages
         DemocracyClaimEvent.cs         - Minimal EventModel backing the native buttons
+        HostConfig.cs                  - Host-authoritative effective config (clients follow the host)
         WaitPanel.cs                   - "waiting for players" overlay
         ResultsPanel.cs                - Post-distribution results summary
+        ConfirmSkipPanel.cs            - Confirmation before skipping unclaimed rewards
         Patches/
             RewardPhasePatch.cs        - Reward-grant capture gate (BeginRewardsSet)
             CombatRewardPatch.cs       - Pooling, grant capture, deck fixes
             PostCombatPatch.cs         - Completion detection + flow orchestration
             NativeUiPatch.cs           - Route native buttons + hold the vanilla Proceed
+            AncientRewardPatch.cs      - Ancient reward pooling + flow trigger
+            ConfigSyncPatch.cs         - Broadcast host config at run launch
+            RelicEffectGate.cs         - Defer relic on-obtain effects until after the vote
             ShopPatch.cs               - Shop purchase logging
         Networking/
-            DemocracyMessages.cs       - ICustomMessage types (stage + advance + resolution)
-            MultiplayerCoordinator.cs  - Stage/advance/resolution send + receive, host detection
+            DemocracyMessages.cs       - ICustomMessage types (stage + advance + resolution + config)
+            MultiplayerCoordinator.cs  - Send + receive all messages, host detection
     DemocracyMod.csproj
     DemocracyMod.json                  - Mod manifest (has_pck: true)
     Directory.Build.props / Sts2PathDiscovery.props

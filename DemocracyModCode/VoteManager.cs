@@ -1,3 +1,5 @@
+using Godot;
+using MegaCrit.Sts2.Core.Models;
 using DemocracyMod.DemocracyModCode;
 using DemocracyMod.DemocracyModCode.Networking;
 using DemocracyMod.DemocracyModCode.Patches;
@@ -351,8 +353,15 @@ public static class VoteManager
         // Disable grant capture during transfers — the synced transfer/discard commands
         // move cards/potions/relics and must not be mistaken for fresh reward grants.
         RewardPool.IsRewardPhaseActive = false;
+        RewardPool.IsAncientRewardPhaseActive = false;
 
+        // Relic on-obtain effects are suppressed during the whole flow via
+        // RewardPool.IsDemocracyFlowActive (set at DemocracyFlow.Start, cleared in
+        // OnDistributionComplete), so the transfer's RelicCmd.Obtain never fires an
+        // effect inline here. Collect the relics and fire their effect after the flow
+        // completes, on the relic owner's machine.
         var results = new List<string>();
+        var deferredRelics = new List<(ModelId RelicId, ulong OwnerId)>();
 
         for (var i = 0; i < resolution.EntryIds.Count; i++)
         {
@@ -367,18 +376,25 @@ public static class VoteManager
                 results.Add(string.Format("{0} → discarded", entry.DisplayName));
                 MainFile.LogVote(string.Format("Democracy: {0} discarded.", entry.DisplayName));
             }
-            else if (winner == entry.SourcePlayerId)
-            {
-                RewardPool.MarkDistributed(entry.Id, winner);
-                results.Add(string.Format("{0} → {1}", entry.DisplayName, PlayerLabel(winner)));
-                MainFile.LogVote(string.Format("Democracy: {0} -> P{1} (uncontested, already owned)", entry.DisplayName, winner));
-            }
             else
             {
-                await RewardPool.TransferReward(entry, winner);
-                RewardPool.MarkDistributed(entry.Id, winner);
-                results.Add(string.Format("{0} → {1}", entry.DisplayName, PlayerLabel(winner)));
-                MainFile.LogVote(string.Format("Democracy: transferred {0} P{1} -> P{2}", entry.DisplayName, entry.SourcePlayerId, winner));
+                if (winner == entry.SourcePlayerId)
+                {
+                    RewardPool.MarkDistributed(entry.Id, winner);
+                    results.Add(string.Format("{0} → {1}", entry.DisplayName, PlayerLabel(winner)));
+                    MainFile.LogVote(string.Format("Democracy: {0} -> P{1} (uncontested, already owned)", entry.DisplayName, winner));
+                }
+                else
+                {
+                    await RewardPool.TransferReward(entry, winner);
+                    RewardPool.MarkDistributed(entry.Id, winner);
+                    results.Add(string.Format("{0} → {1}", entry.DisplayName, PlayerLabel(winner)));
+                    MainFile.LogVote(string.Format("Democracy: transferred {0} P{1} -> P{2}", entry.DisplayName, entry.SourcePlayerId, winner));
+                }
+
+                if (entry.Relic != null &&
+                    entry.Type is RewardPool.PoolEntry.RewardType.Relic or RewardPool.PoolEntry.RewardType.BossRelic)
+                    deferredRelics.Add((entry.Relic.Id, winner));
             }
         }
 
@@ -395,6 +411,79 @@ public static class VoteManager
         CombatRewardPatch.RefreshDeckCount();
 
         PostCombatPatch.OnDistributionComplete(results);
+
+        // Fire deferred relic on-obtain effects once the claim UI is torn down and the
+        // game is back on a normal screen — and only on the relic owner's machine.
+        ScheduleDeferredRelicEffects(deferredRelics);
+    }
+
+    /// <summary>
+    /// Relic on-obtain effects are suppressed during both reward capture and the
+    /// distribution transfer loop (RelicEffectGate). Here we fire them once the flow is
+    /// done, on the relic owner's machine only, so an interactive effect (card selection)
+    /// shows its UI to the right player and its synced commands replicate to the peer.
+    /// </summary>
+    private static void ScheduleDeferredRelicEffects(List<(ModelId RelicId, ulong OwnerId)> relics)
+    {
+        if (relics.Count == 0) return;
+        var tree = Engine.GetMainLoop() as SceneTree;
+        if (tree == null)
+        {
+            MainFile.LogDebug("Democracy: no SceneTree to schedule deferred relic effects.");
+            return;
+        }
+        // Stagger so stacked interactive UIs don't collide.
+        for (var i = 0; i < relics.Count; i++)
+        {
+            var (relicId, ownerId) = relics[i];
+            var timer = tree.CreateTimer(0.9 + i * 0.7);
+            timer.Timeout += () => FireOneDeferredRelicEffect(relicId, ownerId);
+        }
+    }
+
+    private static void FireOneDeferredRelicEffect(ModelId relicId, ulong ownerId)
+    {
+        try
+        {
+            // Fire on EVERY machine. Relic on-obtain effects issue synced commands (card
+            // adds, damage, ...) that must run on BOTH machines of the deterministic
+            // simulation, or the two states diverge (checksum mismatch on the next sync).
+            // Interactive effects (card selection) route through PlayerChoiceSynchronizer,
+            // which shows the picker only to the relic's owner and broadcasts the choice,
+            // so firing on both machines is safe and the owner still makes the pick.
+            var owner = CombatRewardPatch.GetPlayer(ownerId);
+            if (owner == null)
+            {
+                MainFile.LogDebug("Democracy: deferred relic effect — owner P" + ownerId + " not found.");
+                return;
+            }
+
+            var relic = owner.Relics.FirstOrDefault(r => r.Id.Equals(relicId));
+            if (relic == null)
+            {
+                MainFile.LogDebug("Democracy: deferred relic effect — relic not in owner inventory: " + relicId);
+                return;
+            }
+
+            MainFile.LogVote(string.Format("Democracy: firing deferred relic effect [{0}] for P{1}.", relicId, ownerId));
+            _ = FireRelicEffectAsync(relic);
+        }
+        catch (Exception e)
+        {
+            MainFile.LogDebug("Democracy: deferred relic effect error: " + e.Message);
+        }
+    }
+
+    private static async Task FireRelicEffectAsync(RelicModel relic)
+    {
+        try
+        {
+            await relic.AfterObtained();
+        }
+        catch (Exception e)
+        {
+            MainFile.LogDebug("Democracy: deferred relic effect error: " + e.Message);
+        }
     }
 
     public static string PlayerLabel(ulong id)
@@ -411,7 +500,7 @@ public static class VoteManager
         if (candidates.Count == 1) return candidates[0];
         // DETERMINISTIC tie-break. Random.Shared is per-process and desyncs the sim.
         var sorted = candidates.OrderBy(id => id).ToList();
-        var fairness = DemocracyConfig.TieBreakFairness;
+        var fairness = HostConfig.TieBreakFairness;
         var wc = new Dictionary<ulong, int>();
         foreach (var c in sorted)
             wc[c] = RewardPool.PlayerWinCount.GetValueOrDefault(c, 0);

@@ -164,3 +164,48 @@ public sealed class DemocracySelectionMessage : ICustomMessage
 
     public void HandleMessage(ulong senderId) => MultiplayerCoordinator.HandleSelection(senderId, this);
 }
+
+/// <summary>
+/// The HOST's authoritative gameplay config, broadcast to all clients at run launch so
+/// every machine follows the host's settings instead of its own (per-machine config
+/// would diverge the synchronized reward flow). Applied via HostConfig.ApplyRemote.
+/// </summary>
+public sealed class DemocracyConfigMessage : ICustomMessage
+{
+    public bool ShowGoldScreen;
+    public bool ShowPotionsScreen;
+    public bool ShowRelicsScreen;
+    public bool ShowCardsScreen;
+    public bool ShowResultsPanel;
+    public bool EnableAncients;
+    public float TieBreakFairness;
+
+    public bool ShouldBroadcast => true;
+    public NetTransferMode Mode => NetTransferMode.Reliable;
+    public LogLevel LogLevel => LogLevel.Debug;
+
+    public void Serialize(PacketWriter w)
+    {
+        w.WriteBool(ShowGoldScreen);
+        w.WriteBool(ShowPotionsScreen);
+        w.WriteBool(ShowRelicsScreen);
+        w.WriteBool(ShowCardsScreen);
+        w.WriteBool(ShowResultsPanel);
+        w.WriteBool(EnableAncients);
+        w.WriteFloat(TieBreakFairness);
+    }
+
+    public void Deserialize(PacketReader r)
+    {
+        ShowGoldScreen = r.ReadBool();
+        ShowPotionsScreen = r.ReadBool();
+        ShowRelicsScreen = r.ReadBool();
+        ShowCardsScreen = r.ReadBool();
+        ShowResultsPanel = r.ReadBool();
+        EnableAncients = r.ReadBool();
+        TieBreakFairness = r.ReadFloat();
+    }
+
+    public void HandleMessage(ulong senderId) => MultiplayerCoordinator.HandleConfig(senderId, this);
+}
+

@@ -36,6 +36,20 @@ public static class MultiplayerCoordinator
             GoldMode = r.GoldMode,
         });
 
+    /// <summary>Host: broadcast the authoritative gameplay config so all clients follow
+    /// the host's settings (non-deterministic local config diverges the reward flow).</summary>
+    public static void SendConfig()
+        => Send(new DemocracyConfigMessage
+        {
+            ShowGoldScreen = DemocracyConfig.ShowGoldScreen,
+            ShowPotionsScreen = DemocracyConfig.ShowPotionsScreen,
+            ShowRelicsScreen = DemocracyConfig.ShowRelicsScreen,
+            ShowCardsScreen = DemocracyConfig.ShowCardsScreen,
+            ShowResultsPanel = DemocracyConfig.ShowResultsPanel,
+            EnableAncients = DemocracyConfig.EnableAncients,
+            TieBreakFairness = DemocracyConfig.TieBreakFairness,
+        });
+
     /// <summary>Broadcast this player's current live selection for the current stage
     /// (cosmetic icon display only — the authoritative vote is SendStage).</summary>
     public static void SendSelection(int stage, List<string> selectedIds)
@@ -52,6 +66,10 @@ public static class MultiplayerCoordinator
 
     internal static void HandleSelection(ulong senderId, DemocracySelectionMessage msg)
         => DemocracyFlow.ApplyRemoteSelection(senderId, msg.Stage, msg.SelectedIds);
+
+    internal static void HandleConfig(ulong senderId, DemocracyConfigMessage msg)
+        => HostConfig.ApplyRemote(msg.ShowGoldScreen, msg.ShowPotionsScreen, msg.ShowRelicsScreen,
+            msg.ShowCardsScreen, msg.ShowResultsPanel, msg.EnableAncients, msg.TieBreakFairness);
 
     public static void InitializeForRun()
     {

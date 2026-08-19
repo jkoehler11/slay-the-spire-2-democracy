@@ -2,7 +2,7 @@
   "id": "DemocracyMod",
   "name": "Democracy",
   "author": "james",
-  "description": "Multiplayer reward democracy. Pool all combat rewards and vote on who gets what. Anyone can take anything — if they have the votes.",
+  "description": "Multiplayer reward democracy. Pool combat and ancient rewards and vote on who gets what. Anyone can take anything — if they have the votes.",
   "version": "v0.1.0",
   "min_game_version": "0.110.0",
   "has_pck": true,

@@ -38,6 +38,28 @@ public static class PostCombatPatch
         }
     }
 
+
+    /// <summary>
+    /// CompleteRewardsSet is the single completion choke point: it is called both by
+    /// CompleteRewardsSetIfNecessary (all rewards claimed) and by SkipRewardsSet (a
+    /// player declined their remaining rewards). The latter path bypasses
+    /// CompleteRewardsSetIfNecessary, so without this patch a player who claims some
+    /// rewards and then skips the rest would complete their set without ever re-triggering
+    /// the all-players-done check — stranding the group on the loot screen. Fires on every
+    /// machine (skip is broadcast and applied via HandleRewardSetSkippedMessage on peers),
+    /// keeping the completion signal deterministic.
+    /// </summary>
+    [HarmonyPatch(typeof(RewardsSetSynchronizer), "CompleteRewardsSet")]
+    public static class OnRewardsSetCompleted
+    {
+        [HarmonyPostfix]
+        static void Postfix(RewardsSetSynchronizer __instance)
+        {
+            _sync = __instance;
+            CheckCompletion();
+        }
+    }
+
     [HarmonyPatch(typeof(CombatRoom), "OnCombatEnded")]
     public static class OnCombatEndTrigger
     {
@@ -121,7 +143,7 @@ public static class PostCombatPatch
         catch { return false; }
     }
 
-    private static void ResetState()
+    public static void ResetState()
     {
         _sync = null;
         _claimShown = false;
@@ -169,11 +191,18 @@ public static class PostCombatPatch
     /// </summary>
     public static void OnDistributionComplete(List<string> results)
     {
+        RewardPool.IsDemocracyFlowActive = false;
         DemocracyFlow.CloseAll();
 
-        if (!DemocracyConfig.ShowResultsPanel)
+        // Combat proceeds past its suppressed vanilla reward screen; ancient/event
+        // rewards leave the player on the event's own "done" page to proceed manually.
+        Action? onContinue = RunManager.Instance?.State?.CurrentRoom is CombatRoom
+            ? AdvanceFromRewards
+            : null;
+
+        if (!HostConfig.ShowResultsPanel)
         {
-            AdvanceFromRewards();
+            onContinue?.Invoke();
             return;
         }
 
@@ -187,7 +216,7 @@ public static class PostCombatPatch
             {
                 if (tree.Root == null) return;
                 var panel = new ResultsPanel();
-                panel.SetLines(results, AdvanceFromRewards);
+                panel.SetLines(results, onContinue);
                 tree.Root.AddChild(panel);
             }
             catch (Exception e)
