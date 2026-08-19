@@ -196,8 +196,10 @@ public static class PostCombatPatch
 
         // Combat proceeds past its suppressed vanilla reward screen; ancient/event
         // rewards leave the player on the event's own "done" page to proceed manually.
-        Action? onContinue = RunManager.Instance?.State?.CurrentRoom is CombatRoom
+        var currentRoom = RunManager.Instance?.State?.CurrentRoom;
+        Action? onContinue = currentRoom is CombatRoom
             ? AdvanceFromRewards
+            : currentRoom is MerchantRoom ? ShopPatch.LeaveShop
             : null;
 
         if (!HostConfig.ShowResultsPanel)

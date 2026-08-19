@@ -1,5 +1,6 @@
 using BaseLib.Abstracts;
 using DemocracyMod.DemocracyModCode;
+using DemocracyMod.DemocracyModCode.Patches;
 using MegaCrit.Sts2.Core.Platform;
 using MegaCrit.Sts2.Core.Platform.Steam;
 using MegaCrit.Sts2.Core.Runs;
@@ -47,6 +48,7 @@ public static class MultiplayerCoordinator
             ShowCardsScreen = DemocracyConfig.ShowCardsScreen,
             ShowResultsPanel = DemocracyConfig.ShowResultsPanel,
             EnableAncients = DemocracyConfig.EnableAncients,
+            EnableShops = DemocracyConfig.EnableShops,
             TieBreakFairness = DemocracyConfig.TieBreakFairness,
         });
 
@@ -54,6 +56,10 @@ public static class MultiplayerCoordinator
     /// (cosmetic icon display only — the authoritative vote is SendStage).</summary>
     public static void SendSelection(int stage, List<string> selectedIds)
         => Send(new DemocracySelectionMessage { Stage = stage, SelectedIds = selectedIds });
+
+    /// <summary>Broadcast that the local player finished shopping at the merchant.</summary>
+    public static void SendShopDone()
+        => Send(new DemocracyShopDoneMessage());
 
     internal static void HandleStage(ulong senderId, DemocracyStageMessage msg)
         => VoteManager.SubmitStage(senderId, msg.Stage, msg.GoldMode, msg.RewardIds);
@@ -67,15 +73,43 @@ public static class MultiplayerCoordinator
     internal static void HandleSelection(ulong senderId, DemocracySelectionMessage msg)
         => DemocracyFlow.ApplyRemoteSelection(senderId, msg.Stage, msg.SelectedIds);
 
+    internal static void HandleShopDone(ulong senderId, DemocracyShopDoneMessage msg)
+        => ShopPatch.OnPlayerShopDone(senderId);
+
     internal static void HandleConfig(ulong senderId, DemocracyConfigMessage msg)
-        => HostConfig.ApplyRemote(msg.ShowGoldScreen, msg.ShowPotionsScreen, msg.ShowRelicsScreen,
-            msg.ShowCardsScreen, msg.ShowResultsPanel, msg.EnableAncients, msg.TieBreakFairness);
+    {
+        MainFile.LogVote(string.Format(
+            "Democracy: received host config (gold={0} potions={1} relics={2} cards={3} results={4} ancients={5} shops={6} tieBreak={7})",
+            msg.ShowGoldScreen, msg.ShowPotionsScreen, msg.ShowRelicsScreen, msg.ShowCardsScreen,
+            msg.ShowResultsPanel, msg.EnableAncients, msg.EnableShops, msg.TieBreakFairness));
+        HostConfig.ApplyRemote(msg.ShowGoldScreen, msg.ShowPotionsScreen, msg.ShowRelicsScreen,
+            msg.ShowCardsScreen, msg.ShowResultsPanel, msg.EnableAncients, msg.EnableShops, msg.TieBreakFairness);
+    }
+
+    /// <summary>Active platform type: Steam unless running the offline fastmp harness.</summary>
+    private static PlatformType Platform
+        => (SteamInitializer.Initialized && !MegaCrit.Sts2.Core.Helpers.CommandLineHelper.HasArg("fastmp"))
+            ? PlatformType.Steam : PlatformType.None;
 
     public static void InitializeForRun()
     {
-        var pt = (SteamInitializer.Initialized && !MegaCrit.Sts2.Core.Helpers.CommandLineHelper.HasArg("fastmp"))
-            ? PlatformType.Steam : PlatformType.None;
-        LocalPlayerId = PlatformUtil.GetLocalPlayerId(pt);
+        LocalPlayerId = PlatformUtil.GetLocalPlayerId(Platform);
+    }
+
+    /// <summary>Steam display (persona) name for a player NetId, falling back to the raw
+    /// id when unavailable (e.g. not on Steam or the friend has left the lobby).</summary>
+    public static string GetPlayerName(ulong playerId)
+    {
+        try
+        {
+            var name = PlatformUtil.GetPlayerName(Platform, playerId);
+            if (!string.IsNullOrWhiteSpace(name)) return name;
+        }
+        catch (Exception e)
+        {
+            MainFile.LogDebug("Democracy: get player name error: " + e.Message);
+        }
+        return playerId.ToString();
     }
 
     /// <summary>True if this machine controls the first player in the run (the host).</summary>

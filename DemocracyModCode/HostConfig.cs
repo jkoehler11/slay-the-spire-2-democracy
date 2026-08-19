@@ -20,6 +20,7 @@ public static class HostConfig
     private static bool _showCardsScreen = true;
     private static bool _showResultsPanel = true;
     private static bool _enableAncients = true;
+    private static bool _enableShops = true;
     private static float _tieBreakFairness = 0.1f;
 
     /// <summary>True once this machine has an authoritative host snapshot (host: after
@@ -32,6 +33,7 @@ public static class HostConfig
     public static bool ShowCardsScreen => Effective(DemocracyConfig.ShowCardsScreen, _showCardsScreen);
     public static bool ShowResultsPanel => Effective(DemocracyConfig.ShowResultsPanel, _showResultsPanel);
     public static bool EnableAncients => Effective(DemocracyConfig.EnableAncients, _enableAncients);
+    public static bool EnableShops => Effective(DemocracyConfig.EnableShops, _enableShops);
     public static float TieBreakFairness => Effective(DemocracyConfig.TieBreakFairness, _tieBreakFairness);
 
     /// <summary>The host always uses its own live settings; a client uses the received
@@ -51,13 +53,14 @@ public static class HostConfig
         _showCardsScreen = DemocracyConfig.ShowCardsScreen;
         _showResultsPanel = DemocracyConfig.ShowResultsPanel;
         _enableAncients = DemocracyConfig.EnableAncients;
+        _enableShops = DemocracyConfig.EnableShops;
         _tieBreakFairness = DemocracyConfig.TieBreakFairness;
         _received = true;
     }
 
     /// <summary>Apply a host's broadcast config on a client.</summary>
     public static void ApplyRemote(bool showGold, bool showPotions, bool showRelics, bool showCards,
-        bool showResults, bool enableAncients, float tieBreakFairness)
+        bool showResults, bool enableAncients, bool enableShops, float tieBreakFairness)
     {
         _showGoldScreen = showGold;
         _showPotionsScreen = showPotions;
@@ -65,10 +68,13 @@ public static class HostConfig
         _showCardsScreen = showCards;
         _showResultsPanel = showResults;
         _enableAncients = enableAncients;
+        _enableShops = enableShops;
         _tieBreakFairness = tieBreakFairness;
         _received = true;
     }
 
-    /// <summary>Forget any received snapshot (called at run launch before re-sync).</summary>
+    /// <summary>Forget any received snapshot. NOT called at run launch — see
+    /// ConfigSyncPatch for why resetting on launch races with the buffered config
+    /// delivery and causes clients to fall back to divergent local settings.</summary>
     public static void Reset() => _received = false;
 }

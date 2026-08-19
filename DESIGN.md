@@ -41,7 +41,9 @@ confirmation shown only when unclaimed rewards remain.
 Once a player takes a reward, it is captured into the shared **Democracy Pool**, tagged
 with the player who earned it. Pooling is driven by `Hook.AfterRewardTaken` (which fires
 on every machine for every player), so the pool is built deterministically and identically
-everywhere. Non-combat rewards (events, shops, ancients) are never pooled.
+everywhere. Non-combat rewards are normally never pooled — event rewards stay
+vanilla. **Ancients** and **merchant shops** are the two exceptions: both pool their
+rewards and are gated by the **Enable Ancients** / **Enable Shops** settings.
 
 | Reward Type     | Pool Behavior                                                                 |
 |-----------------|-------------------------------------------------------------------------------|
@@ -97,6 +99,9 @@ computes the outcome:
   reward id + sorted player ids, weighted toward players who have won fewer rewards
   (configurable via `TieBreakFairness`).
 - **Unclaimed** rewards return to whoever earned them.
+- **Relics are unique** — a relic whose assigned winner already owns a copy stays with its
+  source (the game has no duplicate-relic state, and effect relics like Pomander break
+  when duplicated).
 - **Gold** is reclaimed and re-granted per the winning mode.
 
 The host then applies the transfers locally and broadcasts the full decision
@@ -126,7 +131,9 @@ live `sts2.dll`):
 | Completion detection           | `RewardsSetSynchronizer.CompleteRewardsSetIfNecessary` | Detect all-players-done |
 | Proceed hold                   | `NRewardsScreen.TryEnableProceedButton`   | Hold vanilla Proceed while loot is pooled  |
 | Reward pooling                 | `Hook.AfterRewardTaken`                   | Pool rewards (selected card only)          |
-| Shop purchase logging          | `Hook.AfterItemPurchased`                 | Log shop purchases                         |
+| Shop capture gate              | `Hook.AfterRoomEntered`                   | Arm shop capture on merchant room entry    |
+| Shop purchase tracking         | `Hook.AfterItemPurchased`                 | Track shop purchases                       |
+| Shop leave gate                | `NMerchantRoom.HideScreen`                | Gate shop leave until everyone's done      |
 | Grant capture (card)           | `CardPileCmd.Add`                          | Capture granted card models                |
 | Grant capture (potion)         | `PotionCmd.TryToProcure`                   | Capture granted potion models              |
 | Grant capture (relic)          | `RelicCmd.Obtain`                          | Capture granted relic models               |
@@ -179,6 +186,7 @@ Via BaseLib `SimpleModConfig` (editable in-game):
 | Show Cards Screen  | ON               | Vote on card claims. OFF: cards stay with their earner.    |
 | Show Results       | ON               | Show the post-combat results summary (OFF skips it)        |
 | Enable Ancients    | ON               | Pool ancient rewards (Neow, Darv, Orobas, …) and vote on them |
+| Enable Shops       | ON               | Pool merchant purchases (cards, potions, relics) and vote on them |
 | Tie-Break Fairness | 0.10             | Weight bonus for win-count deficit in contested tie-breaks |
 
 The four show-screen toggles live in a **Combat** section; the results summary toggle also
@@ -202,8 +210,8 @@ follow the host's values (only the **Logging** toggles are per-machine).
 | Ancient reward pooling         | DONE   |
 | Skip-all-rewards on loot screen| DONE   |
 | Host-authoritative config sync | DONE   |
-| Shop voting                    | TODO   |
-| Shop redistribution            | TODO   |
+| Shop voting                    | DONE   |
+| Shop gold redistribution       | TODO   |
 | Dead-player gold handling      | PARTIAL (pooled gold still split) |
 | Neow blessing vote             | TODO   |
 

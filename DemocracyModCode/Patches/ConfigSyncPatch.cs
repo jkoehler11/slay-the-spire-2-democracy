@@ -13,6 +13,14 @@ namespace DemocracyMod.DemocracyModCode.Patches;
 /// fires once per run on every machine, after NetService and the player list are ready
 /// but before the first event (Neow), so clients have the host's snapshot before any
 /// config-gated decision.
+///
+/// NOTE: we intentionally do NOT call HostConfig.Reset() here. The config message sent
+/// by the host at its own launch postfix can arrive at a client while the NetMessageBus
+/// is buffering messages during the run-start transition; it is delivered during the
+/// client's RunManager.Launch method body, and a Reset() in this postfix would then run
+/// AFTER that delivery and wipe the freshly-applied snapshot, falling back to the client's
+/// divergent LOCAL settings. Keeping the prior snapshot (host re-broadcasts every run and
+/// the message reliably arrives before the first event) is always safer than local.
 /// </summary>
 public static class ConfigSyncPatch
 {
@@ -25,7 +33,6 @@ public static class ConfigSyncPatch
             try
             {
                 MultiplayerCoordinator.InitializeForRun();
-                HostConfig.Reset();
                 if (!MultiplayerCoordinator.IsHost) return;
 
                 HostConfig.CaptureHostValues();

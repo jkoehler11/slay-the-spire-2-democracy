@@ -32,5 +32,12 @@
   "DemocracyMod.ConfirmSkip.Title": "Skip Remaining Rewards?",
   "DemocracyMod.ConfirmSkip.Body": "You still have {0} reward(s) to claim. Skipping will discard them.",
   "DemocracyMod.ConfirmSkip.Confirm": "Skip Rewards",
-  "DemocracyMod.ConfirmSkip.Cancel": "Cancel"
+  "DemocracyMod.ConfirmSkip.Cancel": "Cancel",
+  "DemocracyMod.Choice.Page": "(Page {0} of {1})",
+  "DemocracyMod.Choice.PrevPage": "Previous",
+  "DemocracyMod.Choice.NextPage": "Next Page",
+  "DemocracyMod.WaitPanel.ShopSubtitle": "Waiting for all players to finish shopping",
+  "DemocracyMod.ConfirmShop.Title": "Finish Shopping?",
+  "DemocracyMod.ConfirmShop.Body": "You won't be able to buy anything else. Your purchases will be pooled and voted on.",
+  "DemocracyMod.ConfirmShop.Confirm": "Finish Shopping"
 }

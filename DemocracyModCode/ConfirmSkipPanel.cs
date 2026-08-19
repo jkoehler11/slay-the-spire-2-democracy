@@ -4,21 +4,55 @@ using System;
 namespace DemocracyMod.DemocracyModCode;
 
 /// <summary>
-/// Blocking confirmation shown when a player presses the loot screen's "Skip" button
-/// while they still have unclaimed rewards. Confirming declines the remaining rewards
-/// (they are not pooled) and completes the player's reward set so the group can advance;
-/// cancelling returns to the loot screen unchanged.
+/// Blocking confirmation dialog. Two uses:
+///   1. Skip rewards — shown when a player presses the loot screen's "Skip" button while
+///      they still have unclaimed rewards. Confirming declines the remaining rewards (they
+///      are not pooled) and completes the player's reward set so the group can advance.
+///   2. Finish shopping — shown when a player presses the shop's Proceed button while the
+///      shared shop phase is active. Confirming marks the player done and (once everyone
+///      confirms) triggers the pooled-purchase vote.
+/// Cancelling returns to the underlying screen unchanged in both cases.
 /// </summary>
 public partial class ConfirmSkipPanel : CanvasLayer
 {
-    private int _remaining;
+    private string _title = "";
+    private string _body = "";
+    private string _confirmLabel = "";
     private Action? _onConfirm;
 
+    /// <summary>Skip-remaining-rewards confirmation.</summary>
     public static void Show(int remaining, Action onConfirm)
+    {
+        var title = MainFile.Loc("DemocracyMod.ConfirmSkip.Title", "Skip Remaining Rewards?");
+        var body = string.Format(
+            MainFile.Loc("DemocracyMod.ConfirmSkip.Body",
+                "You still have {0} reward(s) to claim. Skipping will discard them."),
+            remaining);
+        var confirm = MainFile.Loc("DemocracyMod.ConfirmSkip.Confirm", "Skip Rewards");
+        ShowDialog(title, body, confirm, onConfirm);
+    }
+
+    /// <summary>Finish-shopping confirmation (shop Proceed button).</summary>
+    public static void ShowShop(Action onConfirm)
+    {
+        var title = MainFile.Loc("DemocracyMod.ConfirmShop.Title", "Finish Shopping?");
+        var body = MainFile.Loc("DemocracyMod.ConfirmShop.Body",
+            "You won't be able to buy anything else. Your purchases will be pooled and voted on.");
+        var confirm = MainFile.Loc("DemocracyMod.ConfirmShop.Confirm", "Finish Shopping");
+        ShowDialog(title, body, confirm, onConfirm);
+    }
+
+    private static void ShowDialog(string title, string body, string confirmLabel, Action onConfirm)
     {
         var tree = Engine.GetMainLoop() as SceneTree;
         if (tree?.Root == null) return;
-        var panel = new ConfirmSkipPanel { _remaining = remaining, _onConfirm = onConfirm };
+        var panel = new ConfirmSkipPanel
+        {
+            _title = title,
+            _body = body,
+            _confirmLabel = confirmLabel,
+            _onConfirm = onConfirm,
+        };
         tree.Root.AddChild(panel);
     }
 
@@ -34,12 +68,15 @@ public partial class ConfirmSkipPanel : CanvasLayer
         };
         AddChild(bg);
 
+        const float W = 520f;
+        const float H = 240f;
+
         var panel = new Panel
         {
-            Size = new Vector2(480, 210),
+            Size = new Vector2(W, H),
             Position = new Vector2(
-                (DisplayServer.WindowGetSize().X - 480) / 2,
-                (DisplayServer.WindowGetSize().Y - 210) / 2),
+                (DisplayServer.WindowGetSize().X - W) / 2,
+                (DisplayServer.WindowGetSize().Y - H) / 2),
         };
         var style = new StyleBoxFlat();
         style.BgColor = new Color(0.1f, 0.08f, 0.15f, 0.97f);
@@ -48,12 +85,15 @@ public partial class ConfirmSkipPanel : CanvasLayer
         panel.AddThemeStyleboxOverride("panel", style);
         AddChild(panel);
 
+        const float padX = 24f;
+
         var title = new Label
         {
-            Text = MainFile.Loc("DemocracyMod.ConfirmSkip.Title", "Skip Remaining Rewards?"),
-            Position = new Vector2(20, 16),
-            Size = new Vector2(440, 34),
+            Text = _title,
+            Position = new Vector2(padX, 18),
+            Size = new Vector2(W - padX * 2, 40),
             HorizontalAlignment = HorizontalAlignment.Center,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
         title.AddThemeColorOverride("font_color", new Color(0.95f, 0.6f, 0.2f));
         title.AddThemeFontSizeOverride("font_size", 22);
@@ -61,13 +101,12 @@ public partial class ConfirmSkipPanel : CanvasLayer
 
         var body = new Label
         {
-            Text = string.Format(
-                MainFile.Loc("DemocracyMod.ConfirmSkip.Body",
-                    "You still have {0} reward(s) to claim. Skipping will discard them."),
-                _remaining),
-            Position = new Vector2(20, 62),
-            Size = new Vector2(440, 56),
+            Text = _body,
+            Position = new Vector2(padX, 66),
+            Size = new Vector2(W - padX * 2, 92),
             HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
         };
         body.AddThemeColorOverride("font_color", new Color(0.85f, 0.85f, 0.85f));
         body.AddThemeFontSizeOverride("font_size", 16);
@@ -76,17 +115,17 @@ public partial class ConfirmSkipPanel : CanvasLayer
         var cancel = new Button
         {
             Text = MainFile.Loc("DemocracyMod.ConfirmSkip.Cancel", "Cancel"),
-            Position = new Vector2(70, 150),
-            Size = new Vector2(150, 40),
+            Position = new Vector2(80, 178),
+            Size = new Vector2(160, 42),
         };
         cancel.Pressed += QueueFree;
         panel.AddChild(cancel);
 
         var confirm = new Button
         {
-            Text = MainFile.Loc("DemocracyMod.ConfirmSkip.Confirm", "Skip Rewards"),
-            Position = new Vector2(260, 150),
-            Size = new Vector2(150, 40),
+            Text = _confirmLabel,
+            Position = new Vector2(280, 178),
+            Size = new Vector2(160, 42),
         };
         confirm.Pressed += () =>
         {
@@ -96,6 +135,6 @@ public partial class ConfirmSkipPanel : CanvasLayer
         };
         panel.AddChild(confirm);
 
-        MainFile.LogDebug(string.Format("Democracy: confirm-skip panel shown ({0} remaining).", _remaining));
+        MainFile.LogDebug("Democracy: confirmation panel shown.");
     }
 }

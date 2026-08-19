@@ -50,6 +50,12 @@ public class DemocracyConfig : SimpleModConfig
     [ConfigHoverTip]
     public static bool EnableAncients { get; set; } = true;
 
+    [ConfigSection("Shops")]
+    /// <summary>Pool merchant purchases (cards, potions, relics) and vote on who gets what.
+    /// When disabled, shops stay vanilla — each player keeps what they buy.</summary>
+    [ConfigHoverTip]
+    public static bool EnableShops { get; set; } = true;
+
     [ConfigSection("Gameplay")]
     [ConfigSlider(0f, 1f, 0.05f)] public static float TieBreakFairness { get; set; } = 0.1f;
 

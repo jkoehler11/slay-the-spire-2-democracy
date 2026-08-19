@@ -19,8 +19,22 @@ public static class RewardPhasePatch
         [HarmonyPostfix]
         static void Postfix()
         {
-            if (CombatRewardPatch.IsDemocracyActive)
-                RewardPool.IsRewardPhaseActive = true;
+            if (!CombatRewardPatch.IsDemocracyActive) return;
+
+            // After the vote has resolved, a deferred relic effect (Neow's Bones,
+            // Calling Bell, Pandora's Box, ...) can grant bonus relics via a NEW
+            // RewardsSet. That fires BeginRewardsSet again, which must NOT re-arm
+            // reward capture: the bonus relics are not part of the pooled vote and
+            // their on-obtain effects must fire normally. Gating on ResolutionDone
+            // (false during a combat's reward phase, true after the flow) keeps the
+            // combat capture path intact while leaving post-flow bonus sets alone.
+            if (VoteManager.ResolutionDone)
+            {
+                MainFile.LogVote("Democracy: BeginRewardsSet after resolution - not arming reward capture.");
+                return;
+            }
+
+            RewardPool.IsRewardPhaseActive = true;
         }
     }
 }

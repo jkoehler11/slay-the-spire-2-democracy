@@ -178,6 +178,7 @@ public sealed class DemocracyConfigMessage : ICustomMessage
     public bool ShowCardsScreen;
     public bool ShowResultsPanel;
     public bool EnableAncients;
+    public bool EnableShops;
     public float TieBreakFairness;
 
     public bool ShouldBroadcast => true;
@@ -192,6 +193,7 @@ public sealed class DemocracyConfigMessage : ICustomMessage
         w.WriteBool(ShowCardsScreen);
         w.WriteBool(ShowResultsPanel);
         w.WriteBool(EnableAncients);
+        w.WriteBool(EnableShops);
         w.WriteFloat(TieBreakFairness);
     }
 
@@ -203,9 +205,26 @@ public sealed class DemocracyConfigMessage : ICustomMessage
         ShowCardsScreen = r.ReadBool();
         ShowResultsPanel = r.ReadBool();
         EnableAncients = r.ReadBool();
+        EnableShops = r.ReadBool();
         TieBreakFairness = r.ReadFloat();
     }
 
     public void HandleMessage(ulong senderId) => MultiplayerCoordinator.HandleConfig(senderId, this);
+}
+
+
+/// <summary>
+/// Broadcast when a player finishes shopping at the merchant (pressed the leave button).
+/// The shop has no multiplayer leave gate, so this supplies the "all players done" signal.
+/// </summary>
+public sealed class DemocracyShopDoneMessage : ICustomMessage
+{
+    public bool ShouldBroadcast => true;
+    public NetTransferMode Mode => NetTransferMode.Reliable;
+    public LogLevel LogLevel => LogLevel.Debug;
+
+    public void Serialize(PacketWriter w) { }
+    public void Deserialize(PacketReader r) { }
+    public void HandleMessage(ulong senderId) => MultiplayerCoordinator.HandleShopDone(senderId, this);
 }
 

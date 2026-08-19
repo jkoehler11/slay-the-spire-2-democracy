@@ -120,7 +120,7 @@ public static class CombatRewardPatch
         static void Postfix(CardModel card, PileType newPileType)
         {
             if (!IsDemocracyActive) return;
-            if (!RewardPool.IsRewardPhaseActive && !RewardPool.IsAncientRewardPhaseActive) return;
+            if (!RewardPool.IsRewardPhaseActive && !RewardPool.IsAncientRewardPhaseActive && !RewardPool.IsShopPhaseActive) return;
             if (newPileType != PileType.Deck) return;
             if (card == null || card.Owner == null) return;
             RewardPool.NoteGrantedCard(card.Owner.NetId, card);
@@ -135,7 +135,7 @@ public static class CombatRewardPatch
         static void Postfix(PotionModel potion, Player player)
         {
             if (!IsDemocracyActive) return;
-            if (!RewardPool.IsRewardPhaseActive && !RewardPool.IsAncientRewardPhaseActive) return;
+            if (!RewardPool.IsRewardPhaseActive && !RewardPool.IsAncientRewardPhaseActive && !RewardPool.IsShopPhaseActive) return;
             if (potion == null || player == null) return;
             RewardPool.NoteGrantedPotion(player.NetId, potion);
         }
@@ -149,7 +149,7 @@ public static class CombatRewardPatch
         static void Postfix(RelicModel relic, Player player)
         {
             if (!IsDemocracyActive) return;
-            if (!RewardPool.IsRewardPhaseActive && !RewardPool.IsAncientRewardPhaseActive) return;
+            if (!RewardPool.IsRewardPhaseActive && !RewardPool.IsAncientRewardPhaseActive && !RewardPool.IsShopPhaseActive) return;
             if (relic == null || player == null) return;
             RewardPool.NoteGrantedRelic(player.NetId, relic);
         }

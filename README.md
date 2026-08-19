@@ -34,10 +34,10 @@ simulation. Works with **2–4 players**.
    - **Cards.** The card(s) each player actually selected — a "pick 1 of 3" contributes
      exactly one card (the chosen one), not all three options. Toggle **0 to N**, then
      **Finish**.
-   - Non-combat rewards are normally never pooled — events and shops stay vanilla. The
-     exception is **ancients** (Neow, Darv, Orobas, …): those rewards *are* pooled and
-     voted on, and can be turned off with the **Ancients** → **Enable Ancients** setting
-     (when off, each player keeps their own ancient reward).
+   - Non-combat rewards are normally never pooled — event rewards stay vanilla. Two
+     exceptions: **ancients** (Neow, Darv, Orobas, …) and **shops** both *do* pool their
+     rewards into the vote. Ancients are gated by **Ancients → Enable Ancients**; shops by
+     **Shops → Enable Shops** (when either is off, each player keeps their own reward).
 3. **Distribute (host-authoritative)** — After the cards page, the host (the first player
    in the run) alone computes the outcome, applies the transfers, and broadcasts the
    decision. Clients apply the identical result rather than resolving on their own, so
@@ -46,10 +46,14 @@ simulation. Works with **2–4 players**.
    - Contested rewards are tie-broken deterministically (a stable FNV-1a hash over sorted
      player IDs, weighted toward players who have won fewer rewards so far).
    - Unclaimed rewards return to whoever earned them.
+   - Relics are unique: if the vote would hand a relic to a player who already owns one,
+     it stays with whoever earned it instead (the game has no notion of duplicate relics).
 4. **Transfer** — Cards move via the game's own `CardPileCmd.GiveToAnotherPlayer`; potions
    and relics via discard-then-procure with `PotionCmd`/`RelicCmd`. These are the game's
    own replicated commands, so the deterministic simulation applies them identically on
-   every machine.
+   every machine. Relics are unique — a transfer that would give a player a relic they
+   already own is skipped (the relic stays with its source), because the game has no
+   duplicate-relic state.
 5. **Results** — After distribution, a summary panel shows what each player received
    (relics, cards, potions, gold), with a Continue button. On a normal fight Continue
    reopens the map for the whole group; on a boss/victory fight it drives the group's
@@ -122,6 +126,12 @@ Editable in-game via BaseLib `SimpleModConfig`, grouped into sections.
 |------------------|---------|----------------------------------------------------------|
 | Enable Ancients  | ON      | Pool ancient rewards (Neow, Darv, Orobas, …) and vote on them |
 
+**Shops**:
+
+| Setting        | Default | Description                                                  |
+|----------------|---------|--------------------------------------------------------------|
+| Enable Shops   | ON      | Pool merchant purchases (cards, potions, relics) and vote on them |
+
 **Gameplay**:
 
 | Setting            | Default | Description                                          |
@@ -182,7 +192,9 @@ engine (currently `4.5.1.m.14` — check the game binary's `--version` after an 
 | `RewardsSetSynchronizer`            | `CompleteRewardsSetIfNecessary`     | Detect all-players-done                    |
 | `NRewardsScreen`                    | `TryEnableProceedButton`            | Hold the vanilla Proceed while loot is pooled |
 | `Hook`                              | `AfterRewardTaken`                  | Pool rewards (selected card only)          |
-| `Hook`                              | `AfterItemPurchased`                | Log shop purchases                         |
+| `Hook`                              | `AfterRoomEntered`                  | Arm shop capture on merchant room entry    |
+| `Hook`                              | `AfterItemPurchased`                | Track shop purchases                       |
+| `NMerchantRoom`                     | `HideScreen`                        | Gate shop leave until everyone's done      |
 | `CardPileCmd`                       | `Add`                               | Capture granted card models                |
 | `PotionCmd`                         | `TryToProcure`                      | Capture granted potion models              |
 | `RelicCmd`                          | `Obtain`                            | Capture granted relic models               |
@@ -233,13 +245,11 @@ slay-the-spire-2-democracy/
 
 ## Known Gaps
 
-1. **Shop voting** — not implemented. Shop purchases still go through the vanilla flow;
-   the only shop code logs purchases via `AfterItemPurchased`.
-2. **Shop redistribution** — not implemented. Pooled gold is not redistributed on shop
-   exit.
-3. **Dead-player gold** — a dead player's pooled gold is still reclaimed and split even
+1. **Shop gold redistribution** — not implemented. Purchases are pooled and voted on, but
+   gold spent in the shop is never pooled, so there is nothing to redistribute on shop exit.
+2. **Dead-player gold** — a dead player's pooled gold is still reclaimed and split even
    though they can no longer use it.
-4. **No vote timeout** — the claim screens stay open until every player submits, so if a
+3. **No vote timeout** — the claim screens stay open until every player submits, so if a
    player goes AFK mid-flow the group waits indefinitely (the host won't force-resolve).
    Intended; a host-side force-resolve timeout can be added if it becomes a pain point.
 

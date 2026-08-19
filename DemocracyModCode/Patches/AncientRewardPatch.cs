@@ -46,7 +46,9 @@ public static class AncientRewardPatch
 
                 if (ev is AncientEventModel && !isShared && HostConfig.EnableAncients)
                 {
-                    MainFile.LogVote("Democracy: ancient event entered — arming reward capture.");
+                    MainFile.LogVote(string.Format(
+                        "Democracy: ancient event entered — arming reward capture (host={0} received={1} enableAncients={2}).",
+                        MultiplayerCoordinator.IsHost, HostConfig.Received, HostConfig.EnableAncients));
                     PostCombatPatch.ResetState();
                     MultiplayerCoordinator.InitializeForRun();
                     CloseWaitPanel();

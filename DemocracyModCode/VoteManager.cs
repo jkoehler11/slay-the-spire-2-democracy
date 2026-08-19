@@ -378,6 +378,24 @@ public static class VoteManager
             }
             else
             {
+                // Relics are unique — the base game's reward generation never offers a
+                // relic a player already owns, but a democracy vote CAN hand two players'
+                // copies of the same relic to one winner. A duplicate relic is a state the
+                // game never expects: for effect relics like Pomander (choose a card to
+                // upgrade) it stacks a second on-pickup prompt whose card list still shows
+                // the just-upgraded card, and re-selecting it softlocks. So when the winner
+                // already owns this relic, leave it with its source instead of duplicating.
+                var winnerPlayer = CombatRewardPatch.GetPlayer(winner);
+                if ((entry.Type is RewardPool.PoolEntry.RewardType.Relic or RewardPool.PoolEntry.RewardType.BossRelic)
+                    && entry.Relic != null
+                    && winnerPlayer != null
+                    && winnerPlayer.Relics.Any(r => r.Id.Equals(entry.Relic.Id)))
+                {
+                    MainFile.LogVote(string.Format("Democracy: {0} stays with P{1} — P{2} already owns one (no duplicate relics).",
+                        entry.DisplayName, entry.SourcePlayerId, winner));
+                    winner = entry.SourcePlayerId;
+                }
+
                 if (winner == entry.SourcePlayerId)
                 {
                     RewardPool.MarkDistributed(entry.Id, winner);
@@ -488,9 +506,7 @@ public static class VoteManager
 
     public static string PlayerLabel(ulong id)
     {
-        var ids = CombatRewardPatch.GetSeenPlayerIds();
-        int idx = ids.IndexOf(id);
-        var label = idx >= 0 ? string.Format("P{0}", idx + 1) : id.ToString();
+        var label = MultiplayerCoordinator.GetPlayerName(id);
         if (id == MultiplayerCoordinator.LocalPlayerId) label += " (You)";
         return label;
     }

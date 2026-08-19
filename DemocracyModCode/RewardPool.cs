@@ -67,6 +67,9 @@ public static class RewardPool
     /// <summary>Capture reward grants during a non-shared ancient event (ancients have no RewardsSet).</summary>
     public static volatile bool IsAncientRewardPhaseActive;
 
+    /// <summary>Capture reward grants during the merchant shop phase (purchases).</summary>
+    public static volatile bool IsShopPhaseActive;
+
     /// <summary>True from DemocracyFlow.Start until the distribution completes. Set
     /// deterministically on BOTH machines (at flow start) so the transfer's synced
     /// RelicCmd.Obtain suppresses its on-obtain effect on the client too — not just the
@@ -339,6 +342,7 @@ public static class RewardPool
         lock (GrantLock) PendingGrants.Clear();
         IsRewardPhaseActive = false;
         IsAncientRewardPhaseActive = false;
+        IsShopPhaseActive = false;
         IsDemocracyFlowActive = false;
     }
 

@@ -57,6 +57,12 @@ public static class DemocracyFlow
     private static readonly List<string> _selected = new();
     private static bool _done;
 
+    // ---- Pagination (reward-type stages can overflow the native event screen) ----
+    private const int PageSize = 3;
+    private static bool _paginated;
+    private static readonly List<Option> _allOptions = new();
+    private static int _page;
+
     // Live per-player selections for the CURRENT stage: option id -> set of player
     // NetIds who currently have it selected. Drives the per-button player icons.
     private static readonly Dictionary<string, HashSet<ulong>> _selectionByOption = new();
@@ -181,7 +187,7 @@ public static class DemocracyFlow
         }).ToList();
 
         ShowScreen(Mode.Multi, title, subtitle, nextLabel, options, ids =>
-            SubmitStage(stage, -1, ids));
+            SubmitStage(stage, -1, ids), paginated: true);
     }
 
     private static void ShowGold()
@@ -223,18 +229,22 @@ public static class DemocracyFlow
         string subtitle,
         string nextLabel,
         List<Option> options,
-        Action<List<string>> onNext)
+        Action<List<string>> onNext,
+        bool paginated = false)
     {
         _mode = mode;
         _title = title;
         _subtitle = subtitle;
         _nextLabel = nextLabel;
-        _options = options;
+        _paginated = paginated;
         _onNext = onNext;
         _done = false;
         _selected.Clear();
+        _allOptions.Clear();
+        _allOptions.AddRange(options);
         foreach (var o in options)
             if (o.InitiallySelected) _selected.Add(o.Id);
+        SetPage(0);
 
         // New stage: rebuild the live per-player selection map from the local player's
         // default selection plus any remote selections buffered for this stage, then
@@ -247,6 +257,26 @@ public static class DemocracyFlow
             CreateRoom();
             return;
         }
+        Render();
+    }
+
+    private static int PageCount =>
+        _paginated ? Math.Max(1, (int)Math.Ceiling(_allOptions.Count / (double)PageSize)) : 1;
+
+    private static void SetPage(int page)
+    {
+        _page = page;
+        _options = _paginated
+            ? _allOptions.Skip(_page * PageSize).Take(PageSize).ToList()
+            : new List<Option>(_allOptions);
+    }
+
+    private static void PageNav(int delta)
+    {
+        if (!_paginated) return;
+        int target = Math.Clamp(_page + delta, 0, PageCount - 1);
+        if (target == _page) return;
+        SetPage(target);
         Render();
     }
 
@@ -312,6 +342,10 @@ public static class DemocracyFlow
             }
             dict["democracy_next.title"] = _nextLabel;
             dict["democracy_next.description"] = "";
+            dict["democracy_prev_page.title"] = MainFile.Loc("DemocracyMod.Choice.PrevPage", "Previous");
+            dict["democracy_prev_page.description"] = "";
+            dict["democracy_next_page.title"] = MainFile.Loc("DemocracyMod.Choice.NextPage", "Next Page");
+            dict["democracy_next_page.description"] = "";
             table.MergeWith(dict);
             MainFile.Logger.Info("[CRASHDBG] RegisterOptionLocStrings: merged " + dict.Count + " keys");
         }
@@ -331,7 +365,10 @@ public static class DemocracyFlow
             if (layout == null) { MainFile.Logger.Info("[CRASHDBG] Render: layout null"); return; }
 
             layout.SetTitle(_title);
-            layout.SetDescription(_subtitle);
+            var sub = _subtitle;
+            if (_paginated && PageCount > 1)
+                sub += "  " + string.Format(MainFile.Loc("DemocracyMod.Choice.Page", "(Page {0} of {1})"), _page + 1, PageCount);
+            layout.SetDescription(sub);
             layout.ClearOptions();
             MainFile.Logger.Info("[CRASHDBG] Render: title/desc/clear done");
 
@@ -376,15 +413,45 @@ public static class DemocracyFlow
                         MainFile.Logger.Info("[CRASHDBG] Render: option build failed for " + o.Id + ": " + e);
                     }
                 }
-                try
+                bool isLastPage = !_paginated || _page >= PageCount - 1;
+                if (_paginated && _page > 0)
                 {
-                    MainFile.Logger.Info("[CRASHDBG] Render: building next button");
-                    evOptions.Add(new EventOption(ev, () => { OnNext(); return Task.CompletedTask; },
-                        "democracy_next", disableOnChosen: true, isProceed: true, hoverTips: Array.Empty<IHoverTip>()));
+                    try
+                    {
+                        MainFile.Logger.Info("[CRASHDBG] Render: building prev-page button");
+                        evOptions.Add(new EventOption(ev, () => { PageNav(-1); return Task.CompletedTask; },
+                            "democracy_prev_page", disableOnChosen: false, isProceed: true, hoverTips: Array.Empty<IHoverTip>()));
+                    }
+                    catch (Exception e)
+                    {
+                        MainFile.Logger.Info("[CRASHDBG] Render: prev-page-button build failed: " + e);
+                    }
                 }
-                catch (Exception e)
+                if (_paginated && !isLastPage)
                 {
-                    MainFile.Logger.Info("[CRASHDBG] Render: next-button build failed: " + e);
+                    try
+                    {
+                        MainFile.Logger.Info("[CRASHDBG] Render: building next-page button");
+                        evOptions.Add(new EventOption(ev, () => { PageNav(1); return Task.CompletedTask; },
+                            "democracy_next_page", disableOnChosen: false, isProceed: true, hoverTips: Array.Empty<IHoverTip>()));
+                    }
+                    catch (Exception e)
+                    {
+                        MainFile.Logger.Info("[CRASHDBG] Render: next-page-button build failed: " + e);
+                    }
+                }
+                else
+                {
+                    try
+                    {
+                        MainFile.Logger.Info("[CRASHDBG] Render: building next button");
+                        evOptions.Add(new EventOption(ev, () => { OnNext(); return Task.CompletedTask; },
+                            "democracy_next", disableOnChosen: true, isProceed: true, hoverTips: Array.Empty<IHoverTip>()));
+                    }
+                    catch (Exception e)
+                    {
+                        MainFile.Logger.Info("[CRASHDBG] Render: next-button build failed: " + e);
+                    }
                 }
                 MainFile.Logger.Info("[CRASHDBG] Render: built " + evOptions.Count + " options");
             }
@@ -639,6 +706,9 @@ public static class DemocracyFlow
         _onNext = null;
         _selected.Clear();
         _options.Clear();
+        _allOptions.Clear();
+        _page = 0;
+        _paginated = false;
         _selectionByOption.Clear();
         lock (_remoteSelLock) _remoteSelections.Clear();
     }
