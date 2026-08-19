@@ -58,7 +58,7 @@ public static class DemocracyFlow
     private static bool _done;
 
     // ---- Pagination (reward-type stages can overflow the native event screen) ----
-    private const int PageSize = 3;
+    private const int PageSize = 5;
     private static bool _paginated;
     private static readonly List<Option> _allOptions = new();
     private static int _page;
@@ -468,6 +468,7 @@ public static class DemocracyFlow
             // have our dynamic titles/descriptions — stamp our text onto the labels directly.
             RefreshAllLabels();
             RefreshAllVoteIcons();
+            CompactLayout();
             MainFile.Logger.Info("[CRASHDBG] Render: labels refreshed");
 
             MainFile.LogVote(string.Format("Democracy: native event stage shown - {0} ({1} options, {2})",
@@ -577,6 +578,53 @@ public static class DemocracyFlow
         {
             MainFile.LogDebug("Democracy: refresh vote icons error: " + e.Message);
         }
+    }
+
+    /// <summary>
+    /// The native event layout reserves large fixed minimum heights for the title,
+    /// description, and shared-event label (plus a spacer) so it looks right with a big
+    /// portrait and long event text. Our claim screens have no portrait and short
+    /// one-line text, so those reservations become dead whitespace between the title,
+    /// body text, and the large option buttons. Collapse each to its content height so
+    /// the buttons get that room back.
+    /// </summary>
+    private static void CompactLayout()
+    {
+        try
+        {
+            if (_room == null || !GodotObject.IsInstanceValid(_room)) return;
+            var layout = _room.Layout;
+            if (layout == null) return;
+
+            SetMinHeight(layout, "%Title", 0f);
+            SetMinHeight(layout, "%EventDescription", 0f);
+            SetMinHeight(layout, "%SharedEventLabel", 0f);
+
+            var options = layout.GetNodeOrNull<Control>("%OptionsContainer");
+            var vbox = options?.GetParent() as Control;
+            if (vbox != null)
+            {
+                foreach (var child in vbox.GetChildren())
+                {
+                    if (child is Control c && c.Name == "Spacer")
+                    {
+                        c.CustomMinimumSize = new Vector2(0, 14);
+                        break;
+                    }
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            MainFile.LogDebug("Democracy: compact layout error: " + e.Message);
+        }
+    }
+
+    private static void SetMinHeight(NEventLayout layout, string uniqueName, float minY)
+    {
+        var node = layout.GetNodeOrNull<Control>(uniqueName);
+        if (node == null) return;
+        node.CustomMinimumSize = new Vector2(node.CustomMinimumSize.X, minY);
     }
 
     /// <summary>Hover tips for an option so hovering shows the underlying card/potion/relic.</summary>

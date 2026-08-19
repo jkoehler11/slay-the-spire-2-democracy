@@ -37,7 +37,7 @@ public partial class ConfirmSkipPanel : CanvasLayer
     {
         var title = MainFile.Loc("DemocracyMod.ConfirmShop.Title", "Finish Shopping?");
         var body = MainFile.Loc("DemocracyMod.ConfirmShop.Body",
-            "You won't be able to buy anything else. Your purchases will be pooled and voted on.");
+            "You won't be able to buy anything else.\nYour purchases will be pooled and voted on.");
         var confirm = MainFile.Loc("DemocracyMod.ConfirmShop.Confirm", "Finish Shopping");
         ShowDialog(title, body, confirm, onConfirm);
     }
