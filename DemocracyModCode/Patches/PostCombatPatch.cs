@@ -1,6 +1,7 @@
 using HarmonyLib;
 using Godot;
 using System.Collections.Generic;
+using System.Linq;
 using DemocracyMod.DemocracyModCode;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
@@ -25,6 +26,7 @@ public static class PostCombatPatch
 {
     private static RewardsSetSynchronizer? _sync;
     private static bool _claimShown;
+    private static bool _confirmArmed;
     private static WaitPanel? _waitPanel;
 
     [HarmonyPatch(typeof(RewardsSetSynchronizer), "CompleteRewardsSetIfNecessary")]
@@ -92,17 +94,69 @@ public static class PostCombatPatch
         if (_sync == null) return;
         if (!RewardPool.HasPending) return;           // nothing pooled yet (early/empty firing)
 
-        if (!AllRewardStacksEmpty(_sync))
+        bool stacksEmpty = AllRewardStacksEmpty(_sync);
+        bool localDone = LocalPlayerDone(_sync);
+        MainFile.LogDebug(string.Format(
+            "Democracy: completion check — stacksEmpty={0} localDone={1} {2}",
+            stacksEmpty, localDone, StackStateSummary(_sync)));
+
+        if (!stacksEmpty)
         {
             // Someone is still picking. If the local player is already done,
             // show the "waiting for other players" overlay.
-            if (LocalPlayerDone(_sync))
+            _confirmArmed = false;
+            if (localDone)
+            {
+                MainFile.LogDebug("Democracy: still picking — showing wait overlay.");
                 ShowWaitPanel();
+            }
             return;
         }
 
+        // All reward stacks are empty — but this can be transient: the synchronizer pops a
+        // player's set before their next set is pushed, which previously opened the claim UI
+        // (and the "waiting" overlay) while someone was still picking (#2/#10). Require the
+        // empty state to hold across a short delay before claiming.
+        if (!_confirmArmed)
+        {
+            _confirmArmed = true;
+            MainFile.LogVote("Democracy: all stacks empty — arming confirm (re-check in 0.7s).");
+            var tree = Engine.GetMainLoop() as SceneTree;
+            if (tree == null) { CompleteClaim(); return; }
+            var timer = tree.CreateTimer(0.7);
+            timer.Timeout += CheckCompletion;
+            return;
+        }
+
+        MainFile.LogVote("Democracy: all stacks still empty after debounce — claiming.");
+        CompleteClaim();
+    }
+
+    /// <summary>Compact per-player reward-stack depth for debugging the completion signal.
+    /// Each element is one player's rewardsStack.Count (null if the stack list is null).</summary>
+    private static string StackStateSummary(RewardsSetSynchronizer sync)
+    {
+        try
+        {
+            var states = sync._rewardStates;
+            if (states == null) return "[no states]";
+            var depths = new List<string>();
+            foreach (var st in states)
+                depths.Add(st.rewardsStack == null ? "null" : st.rewardsStack.Count.ToString());
+            return "[" + string.Join(", ", depths) + "]";
+        }
+        catch { return "[error]"; }
+    }
+
+    private static void CompleteClaim()
+    {
+        if (_claimShown) return;
         _claimShown = true;
         CloseWaitPanel();
+
+        // Close every open screen (loot screen, deck view, ...) so the claim flow doesn't
+        // render over a live menu (#8).
+        NativeUiPatch.CloseOpenScreens();
 
         var tree = Engine.GetMainLoop() as SceneTree;
         if (tree == null)
@@ -147,6 +201,7 @@ public static class PostCombatPatch
     {
         _sync = null;
         _claimShown = false;
+        _confirmArmed = false;
         CloseWaitPanel();
         DemocracyFlow.Reset();
         VoteManager.Reset();

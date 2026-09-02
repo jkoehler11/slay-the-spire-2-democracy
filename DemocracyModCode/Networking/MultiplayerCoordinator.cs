@@ -18,8 +18,12 @@ public static class MultiplayerCoordinator
     }
 
     /// <summary>A player's vote for one stage (gold mode or reward ids).</summary>
-    public static void SendStage(int stage, int goldMode, List<string> rewardIds)
-        => Send(new DemocracyStageMessage { Stage = stage, GoldMode = goldMode, RewardIds = rewardIds });
+    public static void SendStage(int stage, int goldMode, List<string> rewardIds, bool goldOptOut = false)
+        => Send(new DemocracyStageMessage { Stage = stage, GoldMode = goldMode, RewardIds = rewardIds, GoldOptOut = goldOptOut });
+
+    /// <summary>Broadcast a "go back to an earlier stage" request/command.</summary>
+    public static void SendBack(int toStage)
+        => Send(new DemocracyBackMessage { ToStage = toStage });
 
     /// <summary>Host: every player has voted — advance everyone to the next stage.</summary>
     public static void SendAdvance(int nextStage)
@@ -62,7 +66,28 @@ public static class MultiplayerCoordinator
         => Send(new DemocracyShopDoneMessage());
 
     internal static void HandleStage(ulong senderId, DemocracyStageMessage msg)
-        => VoteManager.SubmitStage(senderId, msg.Stage, msg.GoldMode, msg.RewardIds);
+    {
+        VoteManager.SubmitStage(senderId, msg.Stage, msg.GoldMode, msg.RewardIds, msg.GoldOptOut);
+        DemocracyFlow.NotifyStageSubmitted();
+    }
+
+    internal static void HandleBack(ulong senderId, DemocracyBackMessage msg)
+    {
+        if (IsHost)
+        {
+            // Apply the rewind (idempotent) and re-broadcast it authoritatively so every
+            // client follows. If the transport delivers our own broadcast back to us,
+            // GoBackTo is a no-op and we skip the re-broadcast to avoid a loop.
+            VoteManager.GoBackTo(msg.ToStage);
+            if (senderId != LocalPlayerId)
+                SendBack(msg.ToStage);
+        }
+        else if (senderId == HostPlayerId)
+        {
+            // Only the host's command is authoritative; a peer's request is ignored.
+            VoteManager.GoBackTo(msg.ToStage);
+        }
+    }
 
     internal static void HandleAdvance(ulong senderId, DemocracyAdvanceMessage msg)
         => VoteManager.AdvanceTo(msg.NextStage);
@@ -125,6 +150,21 @@ public static class MultiplayerCoordinator
                 return players[0].NetId == LocalPlayerId;
             }
             catch { return false; }
+        }
+    }
+
+    /// <summary>The first player's NetId (the host). 0 if unknown.</summary>
+    public static ulong HostPlayerId
+    {
+        get
+        {
+            try
+            {
+                var players = RunManager.Instance?.State?.Players;
+                if (players == null || players.Count == 0) return 0;
+                return players[0].NetId;
+            }
+            catch { return 0; }
         }
     }
 }

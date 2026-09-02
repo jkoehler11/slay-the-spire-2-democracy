@@ -58,13 +58,18 @@ public static class CombatRewardPatch
                     PoolCardReward(player, card);
                     return;   // NotifyRewardPooled is called inside PoolCardReward
                 case PotionReward potion:
-                    var potionModel = RewardPool.TakePendingGrant(player.NetId, RewardPool.PoolEntry.RewardType.Potion) as PotionModel;
+                    // Prefer the reward's own model (deterministic on every machine) over the
+                    // pending-grant capture, which races with the synced PotionCmd on peers.
+                    var potionModel = potion.ClaimedPotion ?? potion.Potion
+                        ?? RewardPool.TakePendingGrant(player.NetId, RewardPool.PoolEntry.RewardType.Potion) as PotionModel;
                     RewardPool.AddPotionReward(player.NetId, LocName(potion.Potion?.Title), potionModel);
                     MainFile.LogReward(string.Format("Democracy: potion [{0}] from P{1} pool {2}p",
                         potionModel?.Id.ToString() ?? LocName(potion.Potion?.Title), player.NetId, RewardPool.TotalPotionsPooled));
                     break;
                 case RelicReward relic:
-                    var relicModel = RewardPool.TakePendingGrant(player.NetId, RewardPool.PoolEntry.RewardType.Relic) as RelicModel;
+                    // Same desync fix as potions: use the reward's own model first.
+                    var relicModel = relic.ClaimedRelic ?? relic.Relic
+                        ?? RewardPool.TakePendingGrant(player.NetId, RewardPool.PoolEntry.RewardType.Relic) as RelicModel;
                     RewardPool.AddRelicReward(player.NetId, LocName(relic.Relic?.Title), false, relicModel);
                     MainFile.LogReward(string.Format("Democracy: relic [{0}] from P{1} pool {2}r",
                         relicModel?.Id.ToString() ?? LocName(relic.Relic?.Title), player.NetId, RewardPool.TotalRelicsPooled));
@@ -93,8 +98,10 @@ public static class CombatRewardPatch
             // Exactly one selected card grant is pending per card reward (the vanilla
             // pick granted it just before AfterRewardTaken fired).
             var selected = RewardPool.TakePendingGrant(player.NetId, RewardPool.PoolEntry.RewardType.CardReward) as CardModel;
-            if (selected != null)
-                RewardPool.AddCardReward(player.NetId, 1, selected.Title, selected);
+            // Always pool the card entry. If the grant hasn't arrived on this machine yet
+            // (AfterRewardTaken fires before the synced CardPileCmd.Add), the model is null
+            // now, but RewardPool.NoteGrantedCard backfills it when the command lands.
+            RewardPool.AddCardReward(player.NetId, 1, selected?.Title, selected);
 
             MainFile.LogReward(string.Format("Democracy: card reward from P{0} pooled selected card [{1}] (total {2}c)",
                 player.NetId, selected?.Title ?? "?", RewardPool.TotalCardsPooled));

@@ -31,6 +31,21 @@ namespace DemocracyMod.DemocracyModCode.Patches;
 /// </summary>
 public static class NativeUiPatch
 {
+    /// <summary>Close every open screen/overlay (loot screen, deck view, map, ...) so the
+    /// claim flow renders cleanly instead of over a live menu. Called when the combat claim
+    /// flow takes over (#8). NOverlayStack.Clear() dismisses the whole stack.</summary>
+    public static void CloseOpenScreens()
+    {
+        try
+        {
+            NOverlayStack.Instance?.Clear();
+        }
+        catch (Exception e)
+        {
+            MainFile.LogDebug("Democracy: close open screens error: " + e.Message);
+        }
+    }
+
     [HarmonyPatch(typeof(NEventRoom), "get_Instance")]
     public static class ClaimRoomInstance
     {
@@ -100,6 +115,9 @@ public static class NativeUiPatch
                         var stack = NOverlayStack.Instance;
                         if (stack != null)
                             stack.Remove(screen);
+                        // Re-check completion after skipping so the waiting/claim state
+                        // resolves instead of leaving the player on a buttonless screen (#6).
+                        PostCombatPatch.NotifyRewardPooled();
                     }
                     catch (Exception e)
                     {

@@ -125,7 +125,19 @@ public static class RewardPool
 
     // ---- Pending-grant capture (from the synced grant commands) ----
     public static void NoteGrantedCard(ulong playerId, CardModel card)
-    { lock (GrantLock) PendingGrants.Add(new PendingGrant { PlayerId = playerId, Type = PoolEntry.RewardType.CardReward, Model = card }); }
+    {
+        // Backfill first: on machines where AfterRewardTaken fired BEFORE the synced
+        // CardPileCmd.Add grant arrived (the command replicates on a different sync stream
+        // than the reward-pick signal), the card entry already exists with a null model.
+        // Attach the model directly rather than queueing a grant nothing will drain.
+        lock (LockObj)
+        {
+            var e = Entries.FirstOrDefault(x => !x.Distributed && x.SourcePlayerId == playerId
+                && x.Type == PoolEntry.RewardType.CardReward && x.Card == null);
+            if (e != null) { e.Card = card; return; }
+        }
+        lock (GrantLock) PendingGrants.Add(new PendingGrant { PlayerId = playerId, Type = PoolEntry.RewardType.CardReward, Model = card });
+    }
     public static void NoteGrantedRelic(ulong playerId, RelicModel relic)
     { lock (GrantLock) PendingGrants.Add(new PendingGrant { PlayerId = playerId, Type = PoolEntry.RewardType.Relic, Model = relic }); }
     public static void NoteGrantedPotion(ulong playerId, PotionModel potion)

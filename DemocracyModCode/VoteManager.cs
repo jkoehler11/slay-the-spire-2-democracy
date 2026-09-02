@@ -22,6 +22,7 @@ public static class VoteManager
     public class Claim
     {
         public int GoldMode { get; set; } = -1;
+        public bool GoldOptOut { get; set; }
         public List<string> RewardIds { get; } = new();
     }
 
@@ -41,9 +42,6 @@ public static class VoteManager
 
     // Per-stage, per-player votes: _stageVotes[stage][playerId] = vote.
     private static readonly Dictionary<int, Dictionary<ulong, Claim>> _stageVotes = new();
-    // Accumulated final answers across stages (for the end-of-flow resolution).
-    private static readonly Dictionary<ulong, int> _goldModes = new();
-    private static readonly Dictionary<ulong, List<string>> _rewardIds = new();
 
     private static int _currentStage = 0;
     private static bool _advanced;
@@ -59,8 +57,6 @@ public static class VoteManager
         lock (LockObj)
         {
             _stageVotes.Clear();
-            _goldModes.Clear();
-            _rewardIds.Clear();
             _currentStage = 0;
             _advanced = false;
             _resolutionDone = false;
@@ -78,27 +74,20 @@ public static class VoteManager
         }
     }
 
-    public static void SubmitStage(ulong playerId, int stage, int goldMode, List<string> rewardIds)
+    public static void SubmitStage(ulong playerId, int stage, int goldMode, List<string> rewardIds, bool goldOptOut = false)
     {
         lock (LockObj)
         {
             if (!_stageVotes.TryGetValue(stage, out var d)) { d = new(); _stageVotes[stage] = d; }
             if (!d.TryGetValue(playerId, out var c)) { c = new Claim(); d[playerId] = c; }
             c.GoldMode = goldMode;
+            c.GoldOptOut = goldOptOut;
             c.RewardIds.Clear();
             c.RewardIds.AddRange(rewardIds);
-
-            if (goldMode >= 0) _goldModes[playerId] = goldMode;
-            if (rewardIds.Count > 0)
-            {
-                if (!_rewardIds.TryGetValue(playerId, out var l)) { l = new(); _rewardIds[playerId] = l; }
-                foreach (var id in rewardIds)
-                    if (!l.Contains(id)) l.Add(id);
-            }
         }
 
-        MainFile.LogVote(string.Format("Democracy: stage {0} vote from P{1}: goldMode={2} + [{3}]",
-            stage, playerId, goldMode, string.Join(", ", rewardIds)));
+        MainFile.LogVote(string.Format("Democracy: stage {0} vote from P{1}: goldMode={2} optOut={3} + [{4}]",
+            stage, playerId, goldMode, goldOptOut, string.Join(", ", rewardIds)));
 
         CheckAdvance(stage);
     }
@@ -146,6 +135,43 @@ public static class VoteManager
             _advanced = false;
         }
         DemocracyFlow.ShowStage(nextStage);
+    }
+
+    /// <summary>Player NetIds who have already submitted (voted) the given stage, sorted.
+    /// Drives the "who's ready" icon/name display while waiting.</summary>
+    public static List<ulong> GetSubmittedPlayerIds(int stage)
+    {
+        lock (LockObj)
+            return _stageVotes.TryGetValue(stage, out var d)
+                ? d.Keys.OrderBy(id => id).ToList()
+                : new List<ulong>();
+    }
+
+    public static bool HasSubmitted(ulong playerId, int stage)
+    {
+        lock (LockObj)
+            return _stageVotes.TryGetValue(stage, out var d) && d.ContainsKey(playerId);
+    }
+
+    /// <summary>
+    /// Rewind the synchronized flow to an earlier stage so players can revise their
+    /// selections. Drops the votes for every stage from <paramref name="toStage"/> onward
+    /// (they will be re-collected) but preserves earlier stages' votes. Idempotent: a
+    /// request to go to the current-or-later stage is a no-op, so duplicate/competing
+    /// back broadcasts converge.
+    /// </summary>
+    public static void GoBackTo(int toStage)
+    {
+        lock (LockObj)
+        {
+            if (toStage >= _currentStage) return;   // only rewind, never advance
+            for (int s = toStage; s <= DemocracyFlow.StageCards; s++)
+                _stageVotes.Remove(s);
+            _currentStage = toStage;
+            _advanced = false;
+        }
+        MainFile.LogVote(string.Format("Democracy: rewinding to stage {0}.", toStage));
+        DemocracyFlow.ShowStage(toStage);
     }
 
     /// <summary>
@@ -211,9 +237,19 @@ public static class VoteManager
         if (totalGold > 0)
         {
             var tally = new Dictionary<int, int>();
+            var optedOut = new List<ulong>();
             lock (LockObj)
-                foreach (var kv in _goldModes)
-                    tally[kv.Value] = tally.GetValueOrDefault(kv.Value, 0) + 1;
+            {
+                if (_stageVotes.TryGetValue(DemocracyFlow.StageGold, out var goldVotes))
+                {
+                    foreach (var kv in goldVotes)
+                    {
+                        var mode = kv.Value.GoldMode >= 0 ? kv.Value.GoldMode : (int)GoldVoteMode.OriginalAmount;
+                        tally[mode] = tally.GetValueOrDefault(mode, 0) + 1;
+                        if (kv.Value.GoldOptOut) optedOut.Add(kv.Key);
+                    }
+                }
+            }
 
             int winningMode = DecideGoldMode(tally);
             resolution.GoldMode = winningMode;
@@ -234,15 +270,21 @@ public static class VoteManager
                     resolution.ReclaimAmounts.Add(kv.Value);
                 }
 
-                var grants = winningMode == (int)GoldVoteMode.DistributeEvenly
-                    ? SplitEvenly(playerIds, totalGold)
-                    : SplitRandomized(playerIds, totalGold);
-
-                foreach (var kv in grants.OrderBy(kv => kv.Key))
+                // Players who opted out receive no gold. If nobody wants it the pool is
+                // discarded (already reclaimed above, granted to no one).
+                var recipients = playerIds.Where(id => !optedOut.Contains(id)).ToList();
+                if (recipients.Count > 0)
                 {
-                    if (kv.Value <= 0) continue;
-                    resolution.GoldPlayerIds.Add(kv.Key);
-                    resolution.GoldAmounts.Add(kv.Value);
+                    var grants = winningMode == (int)GoldVoteMode.DistributeEvenly
+                        ? SplitEvenly(recipients, totalGold)
+                        : SplitRandomized(recipients, totalGold);
+
+                    foreach (var kv in grants.OrderBy(kv => kv.Key))
+                    {
+                        if (kv.Value <= 0) continue;
+                        resolution.GoldPlayerIds.Add(kv.Key);
+                        resolution.GoldAmounts.Add(kv.Value);
+                    }
                 }
             }
         }
@@ -253,9 +295,15 @@ public static class VoteManager
         {
             var claimants = new List<ulong>();
             lock (LockObj)
-                foreach (var kv in _rewardIds)
-                    if (kv.Value.Contains(entry.Id))
-                        claimants.Add(kv.Key);
+            {
+                for (int s = DemocracyFlow.StagePotions; s <= DemocracyFlow.StageCards; s++)
+                {
+                    if (!_stageVotes.TryGetValue(s, out var sv)) continue;
+                    foreach (var kv in sv)
+                        if (kv.Value.RewardIds.Contains(entry.Id))
+                            claimants.Add(kv.Key);
+                }
+            }
 
             ulong winner;
             if (claimants.Count == 1)
@@ -263,7 +311,7 @@ public static class VoteManager
             else if (claimants.Count > 1)
                 winner = TieBreak(entry.Id, claimants);
             else
-                winner = entry.SourcePlayerId;   // unclaimed — kept by source
+                winner = 0;   // unclaimed — nobody gets it (discard)
 
             resolution.EntryIds.Add(entry.Id);
             resolution.WinnerIds.Add(winner);
@@ -546,8 +594,6 @@ public static class VoteManager
         lock (LockObj)
         {
             _stageVotes.Clear();
-            _goldModes.Clear();
-            _rewardIds.Clear();
         }
         _resolutionDone = false;
     }

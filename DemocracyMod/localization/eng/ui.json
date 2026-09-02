@@ -39,5 +39,15 @@
   "DemocracyMod.WaitPanel.ShopSubtitle": "Waiting for all players to finish shopping",
   "DemocracyMod.ConfirmShop.Title": "Finish Shopping?",
   "DemocracyMod.ConfirmShop.Body": "You won't be able to buy anything else.\nYour purchases will be pooled and voted on.",
-  "DemocracyMod.ConfirmShop.Confirm": "Finish Shopping"
+  "DemocracyMod.ConfirmShop.Confirm": "Finish Shopping",
+  "DemocracyMod.Gold.None.Title": "No gold for me",
+  "DemocracyMod.Gold.None.Desc": "Don't give me any gold in the split.",
+  "DemocracyMod.Choice.None": "None (take nothing)",
+  "DemocracyMod.Choice.NoneDesc": "Don't claim anything on this page.",
+  "DemocracyMod.Choice.Back": "Back",
+  "DemocracyMod.WaitPanel.YouSelected": "You selected: {0}",
+  "DemocracyMod.WaitPanel.SelectedNothing": "You selected nothing",
+  "DemocracyMod.WaitPanel.AllReady": "Everyone is ready",
+  "DemocracyMod.WaitPanel.Ready": "Ready: {0}",
+  "DemocracyMod.WaitPanel.Waiting": "Waiting: {0}"
 }

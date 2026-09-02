@@ -16,6 +16,7 @@ public sealed class DemocracyStageMessage : ICustomMessage
 {
     public int Stage;
     public int GoldMode = -1;              // GoldVoteMode for stage 0, -1 otherwise
+    public bool GoldOptOut;                // stage 0: the player wants no gold
     public List<string> RewardIds = new();
 
     public bool ShouldBroadcast => true;
@@ -26,6 +27,7 @@ public sealed class DemocracyStageMessage : ICustomMessage
     {
         w.WriteInt(Stage);
         w.WriteInt(GoldMode);
+        w.WriteBool(GoldOptOut);
         w.WriteInt(RewardIds.Count);
         foreach (var id in RewardIds) w.WriteString(id);
     }
@@ -34,6 +36,7 @@ public sealed class DemocracyStageMessage : ICustomMessage
     {
         Stage = r.ReadInt();
         GoldMode = r.ReadInt();
+        GoldOptOut = r.ReadBool();
         var c = r.ReadInt();
         RewardIds = new(c);
         for (var i = 0; i < c; i++) RewardIds.Add(r.ReadString());
@@ -226,5 +229,24 @@ public sealed class DemocracyShopDoneMessage : ICustomMessage
     public void Serialize(PacketWriter w) { }
     public void Deserialize(PacketReader r) { }
     public void HandleMessage(ulong senderId) => MultiplayerCoordinator.HandleShopDone(senderId, this);
+}
+
+/// <summary>
+/// A "go back to an earlier stage" signal. A player broadcasts this when they press the
+/// Back button; only the HOST acts on it (resetting the flow and re-broadcasting the
+/// authoritative command to every client). Clients trust the message only when it comes
+/// from the host, so a peer's request is never applied directly by another peer.
+/// </summary>
+public sealed class DemocracyBackMessage : ICustomMessage
+{
+    public int ToStage;
+
+    public bool ShouldBroadcast => true;
+    public NetTransferMode Mode => NetTransferMode.Reliable;
+    public LogLevel LogLevel => LogLevel.Debug;
+
+    public void Serialize(PacketWriter w) => w.WriteInt(ToStage);
+    public void Deserialize(PacketReader r) => ToStage = r.ReadInt();
+    public void HandleMessage(ulong senderId) => MultiplayerCoordinator.HandleBack(senderId, this);
 }
 

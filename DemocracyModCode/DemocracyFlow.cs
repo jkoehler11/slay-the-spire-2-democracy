@@ -57,6 +57,15 @@ public static class DemocracyFlow
     private static readonly List<string> _selected = new();
     private static bool _done;
 
+    // Options that are mutually exclusive (selecting one deselects the others) — used for
+    // the gold stage's three distribution modes.
+    private static readonly HashSet<string> _singleChoiceGroup = new();
+
+    // Optional id of a "take nothing" option that is exclusive with every real option on
+    // the page (used for the cards stage). Selecting it clears all real selections;
+    // selecting a real option clears it.
+    private static string? _noneOptionId;
+
     // ---- Pagination (reward-type stages can overflow the native event screen) ----
     private const int PageSize = 5;
     private static bool _paginated;
@@ -161,7 +170,10 @@ public static class DemocracyFlow
                     StageCards,
                     MainFile.Loc("DemocracyMod.Choice.CardsTitle", "Claim Cards"),
                     MainFile.Loc("DemocracyMod.Choice.CardsSubtitle", "Select the cards you want to claim."),
-                    MainFile.Loc("DemocracyMod.Choice.Finish", "Finish"));
+                    MainFile.Loc("DemocracyMod.Choice.Finish", "Finish"),
+                    noneOptionId: "card_none",
+                    noneTitle: MainFile.Loc("DemocracyMod.Choice.None", "None (take no card)"),
+                    noneDesc: MainFile.Loc("DemocracyMod.Choice.NoneDesc", "Don't claim any card."));
                 break;
         }
     }
@@ -171,11 +183,26 @@ public static class DemocracyFlow
         int stage,
         string title,
         string subtitle,
-        string nextLabel)
+        string nextLabel,
+        string? noneOptionId = null,
+        string? noneTitle = null,
+        string? noneDesc = null)
     {
         var entries = RewardPool.GetNonGoldPending().Where(filter).OrderBy(e => e.Id).ToList();
 
-        var options = entries.Select(e => new Option
+        var options = new List<Option>();
+        if (noneOptionId != null)
+        {
+            options.Add(new Option
+            {
+                Id = noneOptionId,
+                Title = noneTitle ?? MainFile.Loc("DemocracyMod.Choice.None", "None (take nothing)"),
+                Description = noneDesc ?? MainFile.Loc("DemocracyMod.Choice.NoneDesc", "Don't claim anything on this page."),
+                InitiallySelected = true,
+                Entry = null,
+            });
+        }
+        options.AddRange(entries.Select(e => new Option
         {
             Id = e.Id,
             Title = e.DisplayName,
@@ -184,8 +211,10 @@ public static class DemocracyFlow
                 VoteManager.PlayerLabel(e.SourcePlayerId)),
             InitiallySelected = false,
             Entry = e,
-        }).ToList();
+        }));
 
+        _singleChoiceGroup.Clear();
+        _noneOptionId = noneOptionId;
         ShowScreen(Mode.Multi, title, subtitle, nextLabel, options, ids =>
             SubmitStage(stage, -1, ids), paginated: true);
     }
@@ -202,26 +231,30 @@ public static class DemocracyFlow
                 Description = MainFile.Loc("DemocracyMod.Gold.Randomized.Desc", "Pool all gold and hand it out randomly.") },
             new() { Id = "gold_even", Title = MainFile.Loc("DemocracyMod.Gold.Even.Title", "Distribute evenly"),
                 Description = MainFile.Loc("DemocracyMod.Gold.Even.Desc", "Pool all gold and split it evenly.") },
+            new() { Id = "gold_none", Title = MainFile.Loc("DemocracyMod.Gold.None.Title", "No gold for me"),
+                Description = MainFile.Loc("DemocracyMod.Gold.None.Desc", "Don't give me any gold in the split.") },
         };
 
-        ShowScreen(Mode.Single,
+        _singleChoiceGroup.Clear();
+        _singleChoiceGroup.Add("gold_original");
+        _singleChoiceGroup.Add("gold_random");
+        _singleChoiceGroup.Add("gold_even");
+        _noneOptionId = null;
+
+        ShowScreen(Mode.Multi,
             MainFile.Loc("DemocracyMod.Gold.Title", "GOLD DISTRIBUTION"),
             string.Format(MainFile.Loc("DemocracyMod.Gold.Subtitle", "The group earned {0} gold. Vote on how to split it."), totalGold),
             MainFile.Loc("DemocracyMod.Choice.Next", "Next"),
             options,
             ids =>
             {
-                int mode = ids.Count > 0 ? ModeFromId(ids[0]) : (int)GoldVoteMode.OriginalAmount;
-                SubmitStage(StageGold, mode, new List<string>());
+                int mode = ids.Contains("gold_random") ? (int)GoldVoteMode.Randomized
+                    : ids.Contains("gold_even") ? (int)GoldVoteMode.DistributeEvenly
+                    : (int)GoldVoteMode.OriginalAmount;
+                bool optOut = ids.Contains("gold_none");
+                SubmitStage(StageGold, mode, new List<string>(), optOut);
             });
     }
-
-    private static int ModeFromId(string id) => id switch
-    {
-        "gold_random" => (int)GoldVoteMode.Randomized,
-        "gold_even" => (int)GoldVoteMode.DistributeEvenly,
-        _ => (int)GoldVoteMode.OriginalAmount,
-    };
 
     private static void ShowScreen(
         Mode mode,
@@ -342,6 +375,8 @@ public static class DemocracyFlow
             }
             dict["democracy_next.title"] = _nextLabel;
             dict["democracy_next.description"] = "";
+            dict["democracy_back.title"] = MainFile.Loc("DemocracyMod.Choice.Back", "Back");
+            dict["democracy_back.description"] = "";
             dict["democracy_prev_page.title"] = MainFile.Loc("DemocracyMod.Choice.PrevPage", "Previous");
             dict["democracy_prev_page.description"] = "";
             dict["democracy_next_page.title"] = MainFile.Loc("DemocracyMod.Choice.NextPage", "Next Page");
@@ -453,6 +488,19 @@ public static class DemocracyFlow
                         MainFile.Logger.Info("[CRASHDBG] Render: next-button build failed: " + e);
                     }
                 }
+                if (VoteManager.CurrentStage > StageGold)
+                {
+                    try
+                    {
+                        MainFile.Logger.Info("[CRASHDBG] Render: building back button");
+                        evOptions.Add(new EventOption(ev, () => { OnBack(); return Task.CompletedTask; },
+                            "democracy_back", disableOnChosen: false, isProceed: true, hoverTips: Array.Empty<IHoverTip>()));
+                    }
+                    catch (Exception e)
+                    {
+                        MainFile.Logger.Info("[CRASHDBG] Render: back-button build failed: " + e);
+                    }
+                }
                 MainFile.Logger.Info("[CRASHDBG] Render: built " + evOptions.Count + " options");
             }
             finally
@@ -489,10 +537,26 @@ public static class DemocracyFlow
             _selected.Add(id);
             RefreshAllLabels();
         }
+        else if (_singleChoiceGroup.Contains(id))
+        {
+            // Mutually exclusive mode: deselect the group's other members, select this.
+            foreach (var gid in _singleChoiceGroup)
+                if (gid != id) _selected.Remove(gid);
+            if (!_selected.Contains(id)) _selected.Add(id);
+            RefreshAllLabels();
+        }
+        else if (_noneOptionId == id)
+        {
+            // "Take nothing" — clear every real selection.
+            _selected.Clear();
+            _selected.Add(id);
+            RefreshAllLabels();
+        }
         else
         {
             if (_selected.Contains(id)) _selected.Remove(id);
             else _selected.Add(id);
+            if (_noneOptionId != null) _selected.Remove(_noneOptionId);
             RefreshLabel(id);
         }
         SetPlayerSelection(MultiplayerCoordinator.LocalPlayerId, _selected);
@@ -503,8 +567,14 @@ public static class DemocracyFlow
 
     /// <summary>True if <paramref name="playerId"/> currently has <paramref name="optionId"/>
     /// selected on the current stage (used by the player-icon vote display).</summary>
-    public static bool HasSelected(ulong playerId, string optionId) =>
-        _selectionByOption.TryGetValue(optionId, out var set) && set.Contains(playerId);
+    public static bool HasSelected(ulong playerId, string optionId)
+    {
+        // The Next/Finish button ("democracy_next") shows which players have already
+        // submitted the current stage rather than a toggled selection.
+        if (optionId == "democracy_next")
+            return VoteManager.HasSubmitted(playerId, VoteManager.CurrentStage);
+        return _selectionByOption.TryGetValue(optionId, out var set) && set.Contains(playerId);
+    }
 
     /// <summary>Replaces a player's selections on the current stage with the given ids.</summary>
     private static void SetPlayerSelection(ulong playerId, List<string> selectedIds)
@@ -699,10 +769,87 @@ public static class DemocracyFlow
         cb?.Invoke(result);
     }
 
-    private static void SubmitStage(int stage, int goldMode, List<string> rewardIds)
+    /// <summary>Rewind to the previous stage (Back button). The host applies it locally and
+    /// broadcasts the authoritative command; a client just sends the request and waits.</summary>
+    private static void OnBack()
     {
-        MainFile.LogVote(string.Format("Democracy: submitting stage {0} — goldMode={1}, {2} reward(s)",
-            stage, goldMode, rewardIds.Count));
+        int target = VoteManager.CurrentStage - 1;
+        if (target < StageGold) return;
+        MainFile.LogVote(string.Format("Democracy: back requested to stage {0}.", target));
+        if (MultiplayerCoordinator.IsHost)
+        {
+            VoteManager.GoBackTo(target);
+            MultiplayerCoordinator.SendBack(target);
+        }
+        else
+        {
+            MultiplayerCoordinator.SendBack(target);
+        }
+    }
+
+    /// <summary>Human-readable summary of the local player's current selections.</summary>
+    private static string SelectionSummary()
+    {
+        if (_selected.Count == 0)
+            return MainFile.Loc("DemocracyMod.WaitPanel.SelectedNothing", "You selected nothing");
+        var titles = _selected
+            .Select(id => _allOptions.FirstOrDefault(o => o.Id == id)?.Title ?? id)
+            .ToList();
+        return string.Format(MainFile.Loc("DemocracyMod.WaitPanel.YouSelected", "You selected: {0}"),
+            string.Join(", ", titles));
+    }
+
+    /// <summary>Who has submitted the current stage vs who is still deciding.</summary>
+    private static string ReadySummary()
+    {
+        try
+        {
+            int stage = VoteManager.CurrentStage;
+            var all = CombatRewardPatch.GetSeenPlayerIds();
+            var submitted = VoteManager.GetSubmittedPlayerIds(stage);
+            if (!submitted.Contains(MultiplayerCoordinator.LocalPlayerId))
+                submitted.Add(MultiplayerCoordinator.LocalPlayerId);
+            var ready = all.Where(id => submitted.Contains(id)).Select(VoteManager.PlayerLabel).ToList();
+            var waiting = all.Where(id => !submitted.Contains(id)).Select(VoteManager.PlayerLabel).ToList();
+            if (waiting.Count == 0)
+                return MainFile.Loc("DemocracyMod.WaitPanel.AllReady", "Everyone is ready");
+            var parts = new List<string>();
+            if (ready.Count > 0)
+                parts.Add(string.Format(MainFile.Loc("DemocracyMod.WaitPanel.Ready", "Ready: {0}"), string.Join(", ", ready)));
+            parts.Add(string.Format(MainFile.Loc("DemocracyMod.WaitPanel.Waiting", "Waiting: {0}"), string.Join(", ", waiting)));
+            return string.Join("   ", parts);
+        }
+        catch { return ""; }
+    }
+
+    /// <summary>Refresh the ready display (wait-panel text and the Next/Finish button's
+    /// player icons) after the local player submits or a peer's submission arrives.</summary>
+    private static void RefreshReadyDisplay()
+    {
+        try
+        {
+            if (_waitPanel != null && GodotObject.IsInstanceValid(_waitPanel))
+                _waitPanel.SetReady(ReadySummary());
+            RefreshAllVoteIcons();
+        }
+        catch (Exception e)
+        {
+            MainFile.LogDebug("Democracy: refresh ready display error: " + e.Message);
+        }
+    }
+
+    /// <summary>Public entry for the networking layer: a peer submitted the current stage,
+    /// so the ready icons/text should update.</summary>
+    public static void NotifyStageSubmitted()
+    {
+        if (!_started) return;
+        RefreshReadyDisplay();
+    }
+
+    private static void SubmitStage(int stage, int goldMode, List<string> rewardIds, bool goldOptOut = false)
+    {
+        MainFile.LogVote(string.Format("Democracy: submitting stage {0} — goldMode={1} optOut={2}, {3} reward(s)",
+            stage, goldMode, goldOptOut, rewardIds.Count));
 
         // Show the "waiting" overlay BEFORE submitting. If this machine is the host and
         // the last to vote, VoteManager.SubmitStage -> CheckAdvance advances immediately,
@@ -711,10 +858,16 @@ public static class DemocracyFlow
         // of the freshly-advanced next stage; the host's own Advance broadcast is
         // idempotency-guarded (AdvanceTo returns early when the stage already matches), so
         // nothing ever cleared it and "WAITING FOR PLAYERS" stayed stuck on the host.
-        ShowWaiting();
+        //
+        // On the final (cards/Finish) stage we skip the overlay entirely — ready players are
+        // shown on the Finish button's icons instead (#12).
+        if (stage != StageCards)
+            ShowWaiting();
 
-        VoteManager.SubmitStage(MultiplayerCoordinator.LocalPlayerId, stage, goldMode, rewardIds);
-        MultiplayerCoordinator.SendStage(stage, goldMode, rewardIds);
+        VoteManager.SubmitStage(MultiplayerCoordinator.LocalPlayerId, stage, goldMode, rewardIds, goldOptOut);
+        MultiplayerCoordinator.SendStage(stage, goldMode, rewardIds, goldOptOut);
+
+        RefreshReadyDisplay();
     }
 
     private static void ShowWaiting()
@@ -725,8 +878,10 @@ public static class DemocracyFlow
 
         _waitPanel = new WaitPanel();
         _waitPanel.Configure(
-            MainFile.Loc("DemocracyMod.WaitPanel.Title", "WAITING FOR PLAYERS"),
-            MainFile.Loc("DemocracyMod.WaitPanel.Subtitle", "Waiting for all players to finish selecting rewards"));
+            MainFile.Loc("DemocracyMod.WaitPanel.VoteTitle", "WAITING FOR VOTES"),
+            MainFile.Loc("DemocracyMod.WaitPanel.VoteSubtitle", "Waiting for other players to vote"),
+            selection: SelectionSummary(),
+            ready: ReadySummary());
         tree.Root.AddChild(_waitPanel);
     }
 

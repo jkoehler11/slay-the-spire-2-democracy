@@ -27,9 +27,10 @@ simulation. Works with **2–4 players**.
    + description buttons), the group **only advances when every player has submitted the
    current page**, and **any page with nothing pooled is skipped automatically**. Each page
    can also be disabled in the config — its rewards then stay with whoever earned them:
-   - **Gold.** A three-option vote: **Original amount** (keep what you earned),
-     **Randomized** (pool and deal randomly), or **Distribute evenly** (pool and split
-     evenly). Plurality wins; ties break deterministically.
+   - **Gold.** A vote with three distribution modes — **Original amount** (keep what you
+     earned), **Randomized** (pool and deal randomly), or **Distribute evenly** (pool and
+     split evenly) — plus a per-player **"No gold for me"** opt-out that removes that player
+     from the split. Plurality wins; ties break deterministically.
    - **Potions.** Every pooled potion. Toggle **0 to N**, then **Next**.
    - **Relics.** Every pooled relic (including boss relics). Toggle **0 to N**, then
      **Next**.
@@ -47,7 +48,7 @@ simulation. Works with **2–4 players**.
    - Uncontested rewards go to their sole claimant.
    - Contested rewards are tie-broken deterministically (a stable FNV-1a hash over sorted
      player IDs, weighted toward players who have won fewer rewards so far).
-   - Unclaimed rewards return to whoever earned them.
+   - Unclaimed rewards are discarded — if no one claims an item/card/relic, no one gets it.
    - Relics are unique: if the vote would hand a relic to a player who already owns one,
      it stays with whoever earned it instead (the game has no notion of duplicate relics).
 4. **Transfer** — Cards move via the game's own `CardPileCmd.GiveToAnotherPlayer`; potions

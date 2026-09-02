@@ -79,13 +79,15 @@ by checking the pool on every machine, so the stage sequence is identical everyw
 
 ### 4. Gold Distribution Vote
 
-Gold is page 1, not a per-pile claim. Three mutually exclusive options:
+Gold is page 1, not a per-pile claim. Three mutually exclusive distribution modes,
+plus a per-player opt-out:
 
-| Mode             | Behavior                                                                  |
+| Option           | Behavior                                                                  |
 |------------------|---------------------------------------------------------------------------|
 | Original amount  | Everyone keeps exactly what they earned (no pooling). The default choice. |
 | Randomized       | Pool all gold and deal it out in a deterministic random shuffle.          |
 | Distribute evenly| Pool all gold and split it evenly (remainder to the lowest-indexed players). |
+| No gold for me   | This player is excluded from the split (their share goes to the others).  |
 
 The mode with the most votes wins (plurality). Ties are broken deterministically.
 
@@ -98,7 +100,7 @@ computes the outcome:
 - **Contested** rewards are tie-broken deterministically: a stable FNV-1a hash over the
   reward id + sorted player ids, weighted toward players who have won fewer rewards
   (configurable via `TieBreakFairness`).
-- **Unclaimed** rewards return to whoever earned them.
+- **Unclaimed** rewards are discarded — if no one claims an item/card/relic, no one gets it.
 - **Relics are unique** — a relic whose assigned winner already owns a copy stays with its
   source (the game has no duplicate-relic state, and effect relics like Pomander break
   when duplicated).
