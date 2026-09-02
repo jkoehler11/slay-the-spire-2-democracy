@@ -162,7 +162,10 @@ public static class DemocracyFlow
                     StagePotions,
                     MainFile.Loc("DemocracyMod.Choice.PotionsTitle", "Claim Potions"),
                     MainFile.Loc("DemocracyMod.Choice.PotionsSubtitle", "Select the potions you want to claim."),
-                    AdvanceLabel(StagePotions));
+                    AdvanceLabel(StagePotions),
+                    noneOptionId: "potion_none",
+                    noneTitle: MainFile.Loc("DemocracyMod.Choice.None", "None (take no potion)"),
+                    noneDesc: MainFile.Loc("DemocracyMod.Choice.NoneDesc", "Don't claim any potion."));
                 break;
             case StageRelics:
                 ShowRewardType(
