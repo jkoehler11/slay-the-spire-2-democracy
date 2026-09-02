@@ -170,7 +170,10 @@ public static class DemocracyFlow
                     StageRelics,
                     MainFile.Loc("DemocracyMod.Choice.RelicsTitle", "Claim Relics"),
                     MainFile.Loc("DemocracyMod.Choice.RelicsSubtitle", "Select the relics you want to claim."),
-                    AdvanceLabel(StageRelics));
+                    AdvanceLabel(StageRelics),
+                    noneOptionId: "relic_none",
+                    noneTitle: MainFile.Loc("DemocracyMod.Choice.None", "None (take no relic)"),
+                    noneDesc: MainFile.Loc("DemocracyMod.Choice.NoneDesc", "Don't claim any relic."));
                 break;
             case StageCards:
                 ShowRewardType(
