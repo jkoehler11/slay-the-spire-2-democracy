@@ -30,6 +30,10 @@ public partial class ResultsPanel : CanvasLayer
             Color = new Color(0, 0, 0, 0.75f),
             AnchorRight = 1,
             AnchorBottom = 1,
+            // The results summary is a CanvasLayer that would otherwise sit above the
+            // top bar and swallow the pause/settings button. Let clicks pass through so
+            // the player can still pause while the results are shown.
+            MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         AddChild(bg);
 

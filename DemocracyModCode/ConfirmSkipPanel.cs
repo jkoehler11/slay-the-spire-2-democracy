@@ -65,6 +65,8 @@ public partial class ConfirmSkipPanel : CanvasLayer
             Color = new Color(0, 0, 0, 0.6f),
             AnchorRight = 1,
             AnchorBottom = 1,
+            // Same as ResultsPanel: don't swallow the top bar's pause/settings button.
+            MouseFilter = Control.MouseFilterEnum.Ignore,
         };
         AddChild(bg);
 

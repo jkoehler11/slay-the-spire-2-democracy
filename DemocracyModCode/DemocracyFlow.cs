@@ -353,6 +353,12 @@ public static class DemocracyFlow
             tree.Root.AddChild(_room);
             MainFile.Logger.Info("[CRASHDBG] CreateRoom: AddChild done");
 
+            // The claim room is a full-screen Control appended to the END of the root's
+            // children, so it renders (and captures input) on top of the global UI's top
+            // bar, blocking the pause/settings button. Insert it just below the global UI
+            // so the top bar stays clickable during the vote (#13).
+            PositionRoomBelowGlobalUi(tree.Root);
+
             // _Ready fires SetupLayout (async, ~0.8s). Render our stage content after it settles.
             var timer = tree.CreateTimer(1.0);
             timer.Timeout += () =>
@@ -366,6 +372,49 @@ public static class DemocracyFlow
         catch (Exception e)
         {
             MainFile.Logger.Info("[CRASHDBG] CreateRoom error: " + e);
+        }
+    }
+
+    private static Node? FindDescendantByType(Node root, string typeName)
+    {
+        foreach (Node c in root.GetChildren())
+        {
+            if (c.GetType().Name == typeName) return c;
+            var r = FindDescendantByType(c, typeName);
+            if (r != null) return r;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Move the claim room to render just below the global UI (top bar) so the pause /
+    /// settings button stays clickable while the vote is on screen. AddChild appends the
+    /// room to the end of the root's children, which puts it on top of the top bar and
+    /// swallows its input.
+    /// </summary>
+    private static void PositionRoomBelowGlobalUi(Node root)
+    {
+        try
+        {
+            if (_room == null || !GodotObject.IsInstanceValid(_room)) return;
+            var gui = FindDescendantByType(root, "NGlobalUi");
+            if (gui == null)
+            {
+                MainFile.LogDebug("Democracy: NGlobalUi not found — top bar may be covered by the claim room.");
+                return;
+            }
+            // Walk up to the global UI's topmost ancestor that is a direct child of root,
+            // so we insert the room just before the whole global-UI subtree.
+            var anchor = gui;
+            while (anchor.GetParent() != null && anchor.GetParent() != root)
+                anchor = anchor.GetParent();
+            if (anchor.GetParent() != root) return;
+            root.MoveChild(_room, anchor.GetIndex());
+            MainFile.LogDebug("Democracy: claim room positioned below the global UI (top bar clickable).");
+        }
+        catch (Exception e)
+        {
+            MainFile.LogDebug("Democracy: position claim room error: " + e.Message);
         }
     }
 
@@ -561,8 +610,14 @@ public static class DemocracyFlow
         {
             if (_selected.Contains(id)) _selected.Remove(id);
             else _selected.Add(id);
-            if (_noneOptionId != null) _selected.Remove(_noneOptionId);
-            RefreshLabel(id);
+            if (_noneOptionId != null)
+            {
+                _selected.Remove(_noneOptionId);
+                // If the player deselected every real option, fall back to "take
+                // nothing" so the state is always "None OR one-or-more options".
+                if (_selected.Count == 0) _selected.Add(_noneOptionId);
+            }
+            RefreshAllLabels();
         }
         SetPlayerSelection(MultiplayerCoordinator.LocalPlayerId, _selected);
         BroadcastSelection();
