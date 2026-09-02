@@ -140,18 +140,6 @@ public static class DemocracyFlow
         return -1;
     }
 
-    /// <summary>The first stage strictly BEFORE <paramref name="beforeStage"/> that has loot,
-    /// or -1 if none remain. Drives the Back button so it can only rewind to a stage that
-    /// actually exists in this flow — an ancients flow that pools only relics has no earlier
-    /// stage and must not offer (or navigate to) gold/potions.</summary>
-    public static int PreviousStageWithLoot(int beforeStage)
-    {
-        for (int s = beforeStage - 1; s >= StageGold; s--)
-            if (HasLootForStage(s))
-                return s;
-        return -1;
-    }
-
     /// <summary>Advance-button label for a stage: "Finish" when it is the last stage with
     /// loot (submitting resolves the flow), "Next" otherwise. A relics-only ancients flow
     /// must read "Finish", not "Next".</summary>
@@ -259,6 +247,7 @@ public static class DemocracyFlow
         _singleChoiceGroup.Add("gold_original");
         _singleChoiceGroup.Add("gold_random");
         _singleChoiceGroup.Add("gold_even");
+        _singleChoiceGroup.Add("gold_none");
         _noneOptionId = null;
 
         ShowScreen(Mode.Multi,
@@ -268,10 +257,14 @@ public static class DemocracyFlow
             options,
             ids =>
             {
-                int mode = ids.Contains("gold_random") ? (int)GoldVoteMode.Randomized
+                // "No gold for me" abstains from the distribution-mode vote: it contributes
+                // mode -1 so one player's opt-out can't drag the group's tally to "Original
+                // amount" and suppress the split for everyone else.
+                bool optOut = ids.Contains("gold_none");
+                int mode = optOut ? -1
+                    : ids.Contains("gold_random") ? (int)GoldVoteMode.Randomized
                     : ids.Contains("gold_even") ? (int)GoldVoteMode.DistributeEvenly
                     : (int)GoldVoteMode.OriginalAmount;
-                bool optOut = ids.Contains("gold_none");
                 SubmitStage(StageGold, mode, new List<string>(), optOut);
             });
     }
@@ -395,8 +388,6 @@ public static class DemocracyFlow
             }
             dict["democracy_next.title"] = _nextLabel;
             dict["democracy_next.description"] = "";
-            dict["democracy_back.title"] = MainFile.Loc("DemocracyMod.Choice.Back", "Back");
-            dict["democracy_back.description"] = "";
             dict["democracy_prev_page.title"] = MainFile.Loc("DemocracyMod.Choice.PrevPage", "Previous");
             dict["democracy_prev_page.description"] = "";
             dict["democracy_next_page.title"] = MainFile.Loc("DemocracyMod.Choice.NextPage", "Next Page");
@@ -508,19 +499,7 @@ public static class DemocracyFlow
                         MainFile.Logger.Info("[CRASHDBG] Render: next-button build failed: " + e);
                     }
                 }
-                if (PreviousStageWithLoot(VoteManager.CurrentStage) >= StageGold)
-                {
-                    try
-                    {
-                        MainFile.Logger.Info("[CRASHDBG] Render: building back button");
-                        evOptions.Add(new EventOption(ev, () => { OnBack(); return Task.CompletedTask; },
-                            "democracy_back", disableOnChosen: false, isProceed: true, hoverTips: Array.Empty<IHoverTip>()));
-                    }
-                    catch (Exception e)
-                    {
-                        MainFile.Logger.Info("[CRASHDBG] Render: back-button build failed: " + e);
-                    }
-                }
+                // Back button removed (2026-09-02): stage navigation is forward-only.
                 MainFile.Logger.Info("[CRASHDBG] Render: built " + evOptions.Count + " options");
             }
             finally
@@ -789,23 +768,7 @@ public static class DemocracyFlow
         cb?.Invoke(result);
     }
 
-    /// <summary>Rewind to the previous stage (Back button). The host applies it locally and
-    /// broadcasts the authoritative command; a client just sends the request and waits.</summary>
-    private static void OnBack()
-    {
-        int target = PreviousStageWithLoot(VoteManager.CurrentStage);
-        if (target < StageGold) return;
-        MainFile.LogVote(string.Format("Democracy: back requested to stage {0}.", target));
-        if (MultiplayerCoordinator.IsHost)
-        {
-            VoteManager.GoBackTo(target);
-            MultiplayerCoordinator.SendBack(target);
-        }
-        else
-        {
-            MultiplayerCoordinator.SendBack(target);
-        }
-    }
+    // OnBack removed (2026-09-02): the back button is gone, so no rewind path exists.
 
     /// <summary>Human-readable summary of the local player's current selections.</summary>
     private static string SelectionSummary()

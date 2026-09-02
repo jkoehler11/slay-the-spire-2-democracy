@@ -153,26 +153,7 @@ public static class VoteManager
             return _stageVotes.TryGetValue(stage, out var d) && d.ContainsKey(playerId);
     }
 
-    /// <summary>
-    /// Rewind the synchronized flow to an earlier stage so players can revise their
-    /// selections. Drops the votes for every stage from <paramref name="toStage"/> onward
-    /// (they will be re-collected) but preserves earlier stages' votes. Idempotent: a
-    /// request to go to the current-or-later stage is a no-op, so duplicate/competing
-    /// back broadcasts converge.
-    /// </summary>
-    public static void GoBackTo(int toStage)
-    {
-        lock (LockObj)
-        {
-            if (toStage >= _currentStage) return;   // only rewind, never advance
-            for (int s = toStage; s <= DemocracyFlow.StageCards; s++)
-                _stageVotes.Remove(s);
-            _currentStage = toStage;
-            _advanced = false;
-        }
-        MainFile.LogVote(string.Format("Democracy: rewinding to stage {0}.", toStage));
-        DemocracyFlow.ShowStage(toStage);
-    }
+    // GoBackTo removed (2026-09-02): the back button is gone.
 
     /// <summary>
     /// Resolves the pool with no votes cast. Used when no enabled stage has loot (every
@@ -244,9 +225,12 @@ public static class VoteManager
                 {
                     foreach (var kv in goldVotes)
                     {
+                        // An opted-out player abstains from the mode vote entirely, so their
+                        // default choice can't drag the group back to "Original amount" and
+                        // suppress the split for everyone else.
+                        if (kv.Value.GoldOptOut) { optedOut.Add(kv.Key); continue; }
                         var mode = kv.Value.GoldMode >= 0 ? kv.Value.GoldMode : (int)GoldVoteMode.OriginalAmount;
                         tally[mode] = tally.GetValueOrDefault(mode, 0) + 1;
-                        if (kv.Value.GoldOptOut) optedOut.Add(kv.Key);
                     }
                 }
             }

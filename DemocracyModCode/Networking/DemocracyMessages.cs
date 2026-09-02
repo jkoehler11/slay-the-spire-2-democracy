@@ -231,22 +231,5 @@ public sealed class DemocracyShopDoneMessage : ICustomMessage
     public void HandleMessage(ulong senderId) => MultiplayerCoordinator.HandleShopDone(senderId, this);
 }
 
-/// <summary>
-/// A "go back to an earlier stage" signal. A player broadcasts this when they press the
-/// Back button; only the HOST acts on it (resetting the flow and re-broadcasting the
-/// authoritative command to every client). Clients trust the message only when it comes
-/// from the host, so a peer's request is never applied directly by another peer.
-/// </summary>
-public sealed class DemocracyBackMessage : ICustomMessage
-{
-    public int ToStage;
-
-    public bool ShouldBroadcast => true;
-    public NetTransferMode Mode => NetTransferMode.Reliable;
-    public LogLevel LogLevel => LogLevel.Debug;
-
-    public void Serialize(PacketWriter w) => w.WriteInt(ToStage);
-    public void Deserialize(PacketReader r) => ToStage = r.ReadInt();
-    public void HandleMessage(ulong senderId) => MultiplayerCoordinator.HandleBack(senderId, this);
-}
+// DemocracyBackMessage removed (2026-09-02): the back button is gone.
 
