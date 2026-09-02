@@ -65,14 +65,19 @@ public static class NativeUiPatch
     public static class SuppressCombatProceed
     {
         [HarmonyPrefix]
-        static bool Prefix()
+        static bool Prefix(NRewardsScreen __instance)
         {
-            // While there is pooled combat loot the mod will run the claim flow and
-            // advance the group itself (PostCombatPatch.AdvanceFromRewards). Keep the
-            // vanilla Proceed button disabled so a player can't click through to the
-            // map (or signal ready) before the vote completes. With no pooled loot
-            // (HasPending false) the vanilla Proceed stays intact.
-            if (CombatRewardPatch.IsDemocracyActive && RewardPool.HasPending)
+            if (!CombatRewardPatch.IsDemocracyActive) return true;
+
+            // The vanilla proceed button doubles as the "skip remaining rewards" button
+            // while there are still unclaimed rewards (_rewardButtons non-empty). That
+            // skip path MUST stay available, or a player who claims some rewards (e.g.
+            // picks a card) can no longer skip the rest. Only suppress the advance
+            // (proceed-to-map) when everything has been claimed (_rewardButtons empty)
+            // but the pooled loot is still awaiting a vote — the vote then advances the
+            // group itself via PostCombatPatch.AdvanceFromRewards.
+            bool hasUnclaimed = (__instance._rewardButtons?.Count ?? 0) > 0;
+            if (!hasUnclaimed && RewardPool.HasPending)
                 return false;
             return true;
         }
