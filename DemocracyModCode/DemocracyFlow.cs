@@ -140,6 +140,26 @@ public static class DemocracyFlow
         return -1;
     }
 
+    /// <summary>The first stage strictly BEFORE <paramref name="beforeStage"/> that has loot,
+    /// or -1 if none remain. Drives the Back button so it can only rewind to a stage that
+    /// actually exists in this flow — an ancients flow that pools only relics has no earlier
+    /// stage and must not offer (or navigate to) gold/potions.</summary>
+    public static int PreviousStageWithLoot(int beforeStage)
+    {
+        for (int s = beforeStage - 1; s >= StageGold; s--)
+            if (HasLootForStage(s))
+                return s;
+        return -1;
+    }
+
+    /// <summary>Advance-button label for a stage: "Finish" when it is the last stage with
+    /// loot (submitting resolves the flow), "Next" otherwise. A relics-only ancients flow
+    /// must read "Finish", not "Next".</summary>
+    private static string AdvanceLabel(int stage) =>
+        NextStageWithLoot(stage) < 0
+            ? MainFile.Loc("DemocracyMod.Choice.Finish", "Finish")
+            : MainFile.Loc("DemocracyMod.Choice.Next", "Next");
+
     public static void ShowStage(int stage)
     {
         CloseWait();
@@ -154,7 +174,7 @@ public static class DemocracyFlow
                     StagePotions,
                     MainFile.Loc("DemocracyMod.Choice.PotionsTitle", "Claim Potions"),
                     MainFile.Loc("DemocracyMod.Choice.PotionsSubtitle", "Select the potions you want to claim."),
-                    MainFile.Loc("DemocracyMod.Choice.Next", "Next"));
+                    AdvanceLabel(StagePotions));
                 break;
             case StageRelics:
                 ShowRewardType(
@@ -162,7 +182,7 @@ public static class DemocracyFlow
                     StageRelics,
                     MainFile.Loc("DemocracyMod.Choice.RelicsTitle", "Claim Relics"),
                     MainFile.Loc("DemocracyMod.Choice.RelicsSubtitle", "Select the relics you want to claim."),
-                    MainFile.Loc("DemocracyMod.Choice.Next", "Next"));
+                    AdvanceLabel(StageRelics));
                 break;
             case StageCards:
                 ShowRewardType(
@@ -244,7 +264,7 @@ public static class DemocracyFlow
         ShowScreen(Mode.Multi,
             MainFile.Loc("DemocracyMod.Gold.Title", "GOLD DISTRIBUTION"),
             string.Format(MainFile.Loc("DemocracyMod.Gold.Subtitle", "The group earned {0} gold. Vote on how to split it."), totalGold),
-            MainFile.Loc("DemocracyMod.Choice.Next", "Next"),
+            AdvanceLabel(StageGold),
             options,
             ids =>
             {
@@ -488,7 +508,7 @@ public static class DemocracyFlow
                         MainFile.Logger.Info("[CRASHDBG] Render: next-button build failed: " + e);
                     }
                 }
-                if (VoteManager.CurrentStage > StageGold)
+                if (PreviousStageWithLoot(VoteManager.CurrentStage) >= StageGold)
                 {
                     try
                     {
@@ -773,7 +793,7 @@ public static class DemocracyFlow
     /// broadcasts the authoritative command; a client just sends the request and waits.</summary>
     private static void OnBack()
     {
-        int target = VoteManager.CurrentStage - 1;
+        int target = PreviousStageWithLoot(VoteManager.CurrentStage);
         if (target < StageGold) return;
         MainFile.LogVote(string.Format("Democracy: back requested to stage {0}.", target));
         if (MultiplayerCoordinator.IsHost)

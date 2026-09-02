@@ -27,6 +27,11 @@ public static class PostCombatPatch
     private static RewardsSetSynchronizer? _sync;
     private static bool _claimShown;
     private static bool _confirmArmed;
+    // Set true once we observe the LOCAL player with a non-empty reward stack, so a
+    // null/missing/empty stack before their set is pushed reads as "not started" rather
+    // than "done" (otherwise the non-host saw the waiting overlay the instant the loot
+    // screen appeared).
+    private static bool _localEverHadRewards;
     private static WaitPanel? _waitPanel;
 
     [HarmonyPatch(typeof(RewardsSetSynchronizer), "CompleteRewardsSetIfNecessary")]
@@ -177,8 +182,10 @@ public static class PostCombatPatch
             if (states == null || states.Count < 2) return false;
             foreach (var s in states)
             {
-                if (s.rewardsStack != null && s.rewardsStack.Count > 0)
-                    return false;
+                // A null stack means that player's state hasn't been synced/pushed yet —
+                // treat it as "not empty" so we never claim while anyone is unaccounted for.
+                if (s.rewardsStack == null) return false;
+                if (s.rewardsStack.Count > 0) return false;
             }
             return true;
         }
@@ -192,7 +199,16 @@ public static class PostCombatPatch
             var local = sync.LocalPlayer;
             if (local == null) return false;
             var state = sync.GetRewardStateForPlayer(local);
-            return state == null || state.rewardsStack == null || state.rewardsStack.Count == 0;
+            int depth = state?.rewardsStack?.Count ?? 0;
+            if (depth > 0 && !_localEverHadRewards)
+            {
+                _localEverHadRewards = true;
+                MainFile.LogDebug("Democracy: local reward stack observed — armed 'ever had rewards' latch.");
+            }
+            // "Done" only once we've actually observed this player holding a reward set.
+            // Before their first set is pushed (depth 0, latch unarmed) we return false so
+            // the waiting overlay can't fire for a player who hasn't started picking.
+            return _localEverHadRewards && depth == 0;
         }
         catch { return false; }
     }
@@ -202,6 +218,7 @@ public static class PostCombatPatch
         _sync = null;
         _claimShown = false;
         _confirmArmed = false;
+        _localEverHadRewards = false;
         CloseWaitPanel();
         DemocracyFlow.Reset();
         VoteManager.Reset();
