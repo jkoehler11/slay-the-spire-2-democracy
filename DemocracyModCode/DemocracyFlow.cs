@@ -11,7 +11,6 @@ using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes.Events;
 using MegaCrit.Sts2.Core.HoverTips;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
-using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 
 namespace DemocracyMod.DemocracyModCode;
@@ -354,27 +353,16 @@ public static class DemocracyFlow
             tree.Root.AddChild(_room);
             MainFile.Logger.Info("[CRASHDBG] CreateRoom: AddChild done");
 
-            // COMBAT: the claim room is a full-screen Control appended to the END of the
-            // root's children, so it renders (and captures input) on top of the global UI's
-            // top bar, blocking the pause/settings button. Insert it just below the global UI
-            // so the top bar stays clickable during the vote (#13).
-            //
-            // ANCIENT/EVENT: the map screen (NMapScreen) and the ancient's own event room live
-            // in/above the global UI, so positioning the claim room below the global UI buries
-            // it behind them — the vote is created but never visible, and the players just
-            // proceed (the stale pool then surfaced at the next combat). Leave the claim room
-            // appended on top (full-screen, matching the ancient's own behavior) so the vote
-            // actually shows over the map/ancient.
-            var curRoom = RunManager.Instance?.State?.CurrentRoom;
-            if (curRoom is CombatRoom)
-            {
-                PositionRoomBelowGlobalUi(tree.Root);
-            }
-            else
-            {
-                MainFile.LogDebug("Democracy: claim room left on top (non-combat flow: "
-                    + (curRoom?.GetType().Name ?? "null") + ").");
-            }
+            // The claim room is appended to the END of root's children, so it renders (and
+            // captures input) ON TOP of the global UI (top bar + map screen). That is what the
+            // vote needs: the room's option buttons must receive clicks. An earlier attempt
+            // moved the room BELOW the global UI so the pause/settings button stayed clickable,
+            // but NGlobalUi is a full-screen Control whose default mouse filter swallows every
+            // click, so the room's vote buttons stopped responding (combat: "neither player
+            // could click anything"). Keeping the room on top restores the vote; the trade-off
+            // is the pause button is covered for the ~30s the vote is up — the same behavior the
+            // user already confirmed working in the ancient flow.
+            MainFile.LogDebug("Democracy: claim room left on top (vote buttons must be clickable).");
 
             // _Ready fires SetupLayout (async, ~0.8s). Render our stage content after it settles.
             var timer = tree.CreateTimer(1.0);
