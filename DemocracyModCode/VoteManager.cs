@@ -240,28 +240,48 @@ public static class VoteManager
             MainFile.LogVote(string.Format("Democracy: gold vote -> {0} ({1}g)",
                 (GoldVoteMode)winningMode, totalGold));
 
-            if (winningMode != (int)GoldVoteMode.OriginalAmount)
+            // Players who opted out ("no gold for me") receive no gold in ANY mode, and
+            // their own gold is forfeited into the pool for the remaining players. In a
+            // pool-and-split mode (Randomized / DistributeEvenly) EVERYONE's gold is
+            // reclaimed; in "keep own" (OriginalAmount) mode only the opted-out players'
+            // gold is reclaimed and split among the rest — who keep their own gold on top.
+            // If everyone opted out, all gold is reclaimed and granted to no one (discarded).
+            var recipients = playerIds.Where(id => !optedOut.Contains(id)).ToList();
+            bool splitAll = winningMode != (int)GoldVoteMode.OriginalAmount;
+
+            if (splitAll || optedOut.Count > 0)
             {
-                var autoGold = new Dictionary<ulong, int>();
+                var reclaim = new Dictionary<ulong, int>();
                 var goldEntries = RewardPool.GetPending()
                     .Where(e => e.Type == RewardPool.PoolEntry.RewardType.GoldPile).ToList();
                 foreach (var g in goldEntries)
-                    autoGold[g.SourcePlayerId] = autoGold.GetValueOrDefault(g.SourcePlayerId, 0) + g.GoldAmount;
+                {
+                    if (splitAll || optedOut.Contains(g.SourcePlayerId))
+                        reclaim[g.SourcePlayerId] = reclaim.GetValueOrDefault(g.SourcePlayerId, 0) + g.GoldAmount;
+                }
 
-                foreach (var kv in autoGold.OrderBy(kv => kv.Key))
+                foreach (var kv in reclaim.OrderBy(kv => kv.Key))
                 {
                     resolution.ReclaimPlayerIds.Add(kv.Key);
                     resolution.ReclaimAmounts.Add(kv.Value);
                 }
 
-                // Players who opted out receive no gold. If nobody wants it the pool is
-                // discarded (already reclaimed above, granted to no one).
-                var recipients = playerIds.Where(id => !optedOut.Contains(id)).ToList();
+                if (!splitAll && optedOut.Count > 0)
+                    MainFile.LogVote(string.Format("Democracy: {0} player(s) opted out of gold — pooling {1}g for the rest.",
+                        optedOut.Count, reclaim.Values.Sum()));
+
+                // If nobody wants the gold (everyone opted out) it is discarded — already
+                // reclaimed above, granted to no one.
                 if (recipients.Count > 0)
                 {
-                    var grants = winningMode == (int)GoldVoteMode.DistributeEvenly
-                        ? SplitEvenly(recipients, totalGold)
-                        : SplitRandomized(recipients, totalGold);
+                    // In "keep own" mode the forfeited gold has no designated splitter, so
+                    // it is split evenly among the recipients. In split modes the full pool
+                    // is split per the winning mode.
+                    var grants = splitAll
+                        ? (winningMode == (int)GoldVoteMode.DistributeEvenly
+                            ? SplitEvenly(recipients, totalGold)
+                            : SplitRandomized(recipients, totalGold))
+                        : SplitEvenly(recipients, reclaim.Values.Sum());
 
                     foreach (var kv in grants.OrderBy(kv => kv.Key))
                     {
