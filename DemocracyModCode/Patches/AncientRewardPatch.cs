@@ -46,13 +46,25 @@ public static class AncientRewardPatch
 
                 if (ev is AncientEventModel && !isShared && HostConfig.EnableAncients)
                 {
-                    MainFile.LogVote(string.Format(
-                        "Democracy: ancient event entered — arming reward capture (host={0} received={1} enableAncients={2}).",
-                        MultiplayerCoordinator.IsHost, HostConfig.Received, HostConfig.EnableAncients));
-                    PostCombatPatch.ResetState();
-                    MultiplayerCoordinator.InitializeForRun();
-                    CloseWaitPanel();
-                    _ancientDonePlayers.Clear();
+                    // Ancients are NON-SHARED: BeginEvent fires once PER PLAYER as each
+                    // one enters the event room, and players arrive staggered (the first
+                    // can finish before the second enters). Resetting on every arrival
+                    // wiped the first player's already-pooled relic and their
+                    // _ancientDonePlayers marker, so `done` never reached the player
+                    // count and the vote never opened (the stale pool then surfaced at
+                    // the next combat). Only reset when the capture phase is NOT already
+                    // armed; re-arm the flag unconditionally so the staggered second
+                    // arrival doesn't drop capture mid-ancient.
+                    if (!RewardPool.IsAncientRewardPhaseActive)
+                    {
+                        MainFile.LogVote(string.Format(
+                            "Democracy: ancient event entered — arming reward capture (host={0} received={1} enableAncients={2}).",
+                            MultiplayerCoordinator.IsHost, HostConfig.Received, HostConfig.EnableAncients));
+                        PostCombatPatch.ResetState();
+                        MultiplayerCoordinator.InitializeForRun();
+                        CloseWaitPanel();
+                        _ancientDonePlayers.Clear();
+                    }
                     RewardPool.IsAncientRewardPhaseActive = true;
                 }
                 else
