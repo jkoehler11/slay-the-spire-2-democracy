@@ -269,6 +269,9 @@ public static class VoteManager
                 if (!splitAll && optedOut.Count > 0)
                     MainFile.LogVote(string.Format("Democracy: {0} player(s) opted out of gold — pooling {1}g for the rest.",
                         optedOut.Count, reclaim.Values.Sum()));
+                else if (splitAll && optedOut.Count > 0)
+                    MainFile.LogVote(string.Format("Democracy: split mode with {0} opt-out(s) — full pool {1}g (incl. opted-out gold) split among {2} recipient(s).",
+                        optedOut.Count, totalGold, recipients.Count));
 
                 // If nobody wants the gold (everyone opted out) it is discarded — already
                 // reclaimed above, granted to no one.
