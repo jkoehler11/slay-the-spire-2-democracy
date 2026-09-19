@@ -30,7 +30,11 @@ public static class RelicEffectGate
     /// <summary>Transpiler replacement for RelicModel.AfterObtained.</summary>
     public static Task InvokeAfterObtained(RelicModel relic)
     {
-        if (RewardPool.IsRewardPhaseActive || RewardPool.IsAncientRewardPhaseActive)
+        // Every capture phase must suppress the on-obtain effect here, or a relic bought
+        // in the shop fires its effect the instant it is purchased, before the vote runs.
+        // Shop purchases also route through RelicCmd.Obtain, so IsShopPhaseActive must be
+        // checked alongside the reward/ancient phases.
+        if (RewardPool.IsRewardPhaseActive || RewardPool.IsAncientRewardPhaseActive || RewardPool.IsShopPhaseActive)
         {
             MainFile.LogVote(string.Format(
                 "Democracy: deferred relic effect [{0}] until selection resolves.",

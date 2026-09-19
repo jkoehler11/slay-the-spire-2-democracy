@@ -370,7 +370,10 @@ public static class DemocracyFlow
             {
                 MainFile.Logger.Info("[CRASHDBG] CreateRoom: timer fired");
                 if (_room != null && GodotObject.IsInstanceValid(_room))
+                {
+                    MakePassThrough(_room);
                     Render();
+                }
             };
             MainFile.Logger.Info("[CRASHDBG] CreateRoom: timer scheduled");
         }
@@ -380,46 +383,32 @@ public static class DemocracyFlow
         }
     }
 
-    private static Node? FindDescendantByType(Node root, string typeName)
-    {
-        foreach (Node c in root.GetChildren())
-        {
-            if (c.GetType().Name == typeName) return c;
-            var r = FindDescendantByType(c, typeName);
-            if (r != null) return r;
-        }
-        return null;
-    }
-
     /// <summary>
-    /// Move the claim room to render just below the global UI (top bar) so the pause /
-    /// settings button stays clickable while the vote is on screen. AddChild appends the
-    /// room to the end of the root's children, which puts it on top of the top bar and
-    /// swallows its input.
+    /// Make the claim room pass-through everywhere EXCEPT on its option buttons, so the
+    /// vote's buttons still capture clicks while clicks anywhere else (the top bar: deck,
+    /// player portraits, map, settings) fall through to the global UI underneath. The room
+    /// subtree is a stack of full-screen Controls (EventRoom -> SceneContainer ->
+    /// NEventLayout, plus VfxContainer) whose default STOP mouse filter swallows every
+    /// click over the whole screen — that was the "can't check cards / other players'
+    /// cards during the vote" bug. MouseFilter is per-node (an Ignore parent does not stop
+    /// its STOP children from being picked), so we set Ignore on every Control that is NOT
+    /// a Button; the NEventOptionButton option buttons are created later by Render/
+    /// AddOptions and keep their default STOP. Applied once after SetupLayout settles and
+    /// before the first Render. Do NOT MoveChild the room below NGlobalUi instead — that
+    /// kills the vote (the global UI's own full-screen STOP swallows the option buttons).
     /// </summary>
-    private static void PositionRoomBelowGlobalUi(Node root)
+    private static void MakePassThrough(Node root)
     {
         try
         {
-            if (_room == null || !GodotObject.IsInstanceValid(_room)) return;
-            var gui = FindDescendantByType(root, "NGlobalUi");
-            if (gui == null)
-            {
-                MainFile.LogDebug("Democracy: NGlobalUi not found — top bar may be covered by the claim room.");
-                return;
-            }
-            // Walk up to the global UI's topmost ancestor that is a direct child of root,
-            // so we insert the room just before the whole global-UI subtree.
-            var anchor = gui;
-            while (anchor.GetParent() != null && anchor.GetParent() != root)
-                anchor = anchor.GetParent();
-            if (anchor.GetParent() != root) return;
-            root.MoveChild(_room, anchor.GetIndex());
-            MainFile.LogDebug("Democracy: claim room positioned below the global UI (top bar clickable).");
+            if (root is Control c && root is not Button && root is not NEventOptionButton)
+                c.MouseFilter = Control.MouseFilterEnum.Ignore;
+            foreach (Node child in root.GetChildren())
+                MakePassThrough(child);
         }
         catch (Exception e)
         {
-            MainFile.LogDebug("Democracy: position claim room error: " + e.Message);
+            MainFile.LogDebug("Democracy: pass-through error: " + e.Message);
         }
     }
 
