@@ -43,6 +43,11 @@ public static class DemocracyFlow
         public RewardPool.PoolEntry? Entry = null;
     }
 
+    /// <summary>EventModel.Id of the synthetic claim event — EventModel derives the id from
+    /// the type name, and the game resolves the room title as "{Id}.title" in the "events"
+    /// loc table.</summary>
+    private const string ClaimEventLocId = "DEMOCRACY_CLAIM_EVENT";
+
     private static bool _started;
     private static NEventRoom? _room;
     private static EventModel? _event;
@@ -336,14 +341,19 @@ public static class DemocracyFlow
     {
         try
         {
-            MainFile.Logger.Info("[CRASHDBG] CreateRoom: start");
+            MainFile.LogDebug("[CRASHDBG] CreateRoom: start");
+            // The room renders EventModel.Title while _Ready/SetupLayout runs, i.e. BEFORE our
+            // first Render() (~1s later). Register the claim event's own table entry first so
+            // NEventLayout finds a real title instead of logging
+            // "GetRawText: Key 'DEMOCRACY_CLAIM_EVENT.title' not found" and drawing a blank one.
+            RegisterClaimEventLoc();
             var canonical = ModelDb.Get<DemocracyClaimEvent>();
             _event = canonical.ToMutable();
             _event.Owner = CombatRewardPatch.GetPlayer(MultiplayerCoordinator.LocalPlayerId);
-            MainFile.Logger.Info("[CRASHDBG] CreateRoom: owner = " + (_event.Owner != null));
+            MainFile.LogDebug("[CRASHDBG] CreateRoom: owner = " + (_event.Owner != null));
             var runState = RunManager.Instance?.State as IRunState;
             _room = NEventRoom.Create(_event, runState, false);
-            MainFile.Logger.Info("[CRASHDBG] CreateRoom: room created = " + (_room != null));
+            MainFile.LogDebug("[CRASHDBG] CreateRoom: room created = " + (_room != null));
             var tree = Engine.GetMainLoop() as SceneTree;
             if (tree?.Root == null || _room == null)
             {
@@ -351,7 +361,7 @@ public static class DemocracyFlow
                 return;
             }
             tree.Root.AddChild(_room);
-            MainFile.Logger.Info("[CRASHDBG] CreateRoom: AddChild done");
+            MainFile.LogDebug("[CRASHDBG] CreateRoom: AddChild done");
 
             // The claim room is appended to the END of root's children, so it renders (and
             // captures input) ON TOP of the global UI (top bar + map screen). That is what the
@@ -368,18 +378,18 @@ public static class DemocracyFlow
             var timer = tree.CreateTimer(1.0);
             timer.Timeout += () =>
             {
-                MainFile.Logger.Info("[CRASHDBG] CreateRoom: timer fired");
+                MainFile.LogDebug("[CRASHDBG] CreateRoom: timer fired");
                 if (_room != null && GodotObject.IsInstanceValid(_room))
                 {
                     MakePassThrough(_room);
                     Render();
                 }
             };
-            MainFile.Logger.Info("[CRASHDBG] CreateRoom: timer scheduled");
+            MainFile.LogDebug("[CRASHDBG] CreateRoom: timer scheduled");
         }
         catch (Exception e)
         {
-            MainFile.Logger.Info("[CRASHDBG] CreateRoom error: " + e);
+            MainFile.Logger.Info("[CRASHDBG] ERROR CreateRoom error: " + e);
         }
     }
 
@@ -412,21 +422,45 @@ public static class DemocracyFlow
         }
     }
 
+    /// <summary>Register the claim room's own title/description under the keys the game's
+    /// event layout resolves ({EventId}.title / .description in the "events" table). The
+    /// shipped events.json covers this too; the runtime merge keeps an older .pck (or a
+    /// Workshop copy that predates the table entry) from rendering an empty title.</summary>
+    private static void RegisterClaimEventLoc()
+    {
+        try
+        {
+            var table = LocManager.Instance?.GetTable("events");
+            if (table == null) return;
+            table.MergeWith(new Dictionary<string, string>
+            {
+                [ClaimEventLocId + ".title"] =
+                    MainFile.Loc("DemocracyMod.ClaimEvent.Title", "Claim Rewards"),
+                [ClaimEventLocId + ".description"] =
+                    MainFile.Loc("DemocracyMod.ClaimEvent.Description", "Vote on who takes each pooled reward."),
+            });
+        }
+        catch (Exception e)
+        {
+            MainFile.Logger.Info("Democracy: claim-event loc registration failed: " + e.Message);
+        }
+    }
+
     private static void RegisterOptionLocStrings()
     {
         try
         {
-            MainFile.Logger.Info("[CRASHDBG] RegisterOptionLocStrings: entry");
+            MainFile.LogDebug("[CRASHDBG] RegisterOptionLocStrings: entry");
             var lm = LocManager.Instance;
             if (lm == null)
             {
-                MainFile.Logger.Info("[CRASHDBG] RegisterOptionLocStrings: LocManager.Instance null");
+                MainFile.LogDebug("[CRASHDBG] RegisterOptionLocStrings: LocManager.Instance null");
                 return;
             }
             var table = lm.GetTable("events");
             if (table == null)
             {
-                MainFile.Logger.Info("[CRASHDBG] RegisterOptionLocStrings: 'events' table null");
+                MainFile.LogDebug("[CRASHDBG] RegisterOptionLocStrings: 'events' table null");
                 return;
             }
             var dict = new Dictionary<string, string>();
@@ -442,11 +476,11 @@ public static class DemocracyFlow
             dict["democracy_next_page.title"] = MainFile.Loc("DemocracyMod.Choice.NextPage", "Next Page");
             dict["democracy_next_page.description"] = "";
             table.MergeWith(dict);
-            MainFile.Logger.Info("[CRASHDBG] RegisterOptionLocStrings: merged " + dict.Count + " keys");
+            MainFile.LogDebug("[CRASHDBG] RegisterOptionLocStrings: merged " + dict.Count + " keys");
         }
         catch (Exception e)
         {
-            MainFile.Logger.Info("[CRASHDBG] RegisterOptionLocStrings error: " + e);
+            MainFile.Logger.Info("[CRASHDBG] ERROR RegisterOptionLocStrings error: " + e);
         }
     }
 
@@ -454,10 +488,10 @@ public static class DemocracyFlow
     {
         try
         {
-            MainFile.Logger.Info("[CRASHDBG] Render: entry");
-            if (_room == null || !GodotObject.IsInstanceValid(_room)) { MainFile.Logger.Info("[CRASHDBG] Render: room invalid"); return; }
+            MainFile.LogDebug("[CRASHDBG] Render: entry");
+            if (_room == null || !GodotObject.IsInstanceValid(_room)) { MainFile.LogDebug("[CRASHDBG] Render: room invalid"); return; }
             var layout = _room.Layout;
-            if (layout == null) { MainFile.Logger.Info("[CRASHDBG] Render: layout null"); return; }
+            if (layout == null) { MainFile.LogDebug("[CRASHDBG] Render: layout null"); return; }
 
             layout.SetTitle(_title);
             var sub = _subtitle;
@@ -465,7 +499,7 @@ public static class DemocracyFlow
                 sub += "  " + string.Format(MainFile.Loc("DemocracyMod.Choice.Page", "(Page {0} of {1})"), _page + 1, PageCount);
             layout.SetDescription(sub);
             layout.ClearOptions();
-            MainFile.Logger.Info("[CRASHDBG] Render: title/desc/clear done");
+            MainFile.LogDebug("[CRASHDBG] Render: title/desc/clear done");
 
             // The 5-param EventOption ctor resolves Title/Description via
             // eventModel.GetOptionTitle/Description(id) -> LocString.GetIfExists("events",
@@ -487,7 +521,7 @@ public static class DemocracyFlow
             // Owner.RunState.Players for the vote container.
             var savedOwner = _event?.Owner;
             if (_event != null) _event.Owner = null!;
-            MainFile.Logger.Info("[CRASHDBG] Render: owner nulled for build");
+            MainFile.LogDebug("[CRASHDBG] Render: owner nulled for build");
             var evOptions = new List<EventOption>();
             try
             {
@@ -497,15 +531,15 @@ public static class DemocracyFlow
                     var o = opt;
                     try
                     {
-                        MainFile.Logger.Info("[CRASHDBG] Render: building option " + o.Id);
+                        MainFile.LogDebug("[CRASHDBG] Render: building option " + o.Id);
                         var eo = new EventOption(ev, () => HandleChoice(o.Id), o.Id,
                             disableOnChosen: false, isProceed: true, hoverTips: BuildHoverTips(o));
                         evOptions.Add(eo);
-                        MainFile.Logger.Info("[CRASHDBG] Render: built option " + o.Id);
+                        MainFile.LogDebug("[CRASHDBG] Render: built option " + o.Id);
                     }
                     catch (Exception e)
                     {
-                        MainFile.Logger.Info("[CRASHDBG] Render: option build failed for " + o.Id + ": " + e);
+                        MainFile.Logger.Info("[CRASHDBG] ERROR Render: option build failed for " + o.Id + ": " + e);
                     }
                 }
                 bool isLastPage = !_paginated || _page >= PageCount - 1;
@@ -513,66 +547,66 @@ public static class DemocracyFlow
                 {
                     try
                     {
-                        MainFile.Logger.Info("[CRASHDBG] Render: building prev-page button");
+                        MainFile.LogDebug("[CRASHDBG] Render: building prev-page button");
                         evOptions.Add(new EventOption(ev, () => { PageNav(-1); return Task.CompletedTask; },
                             "democracy_prev_page", disableOnChosen: false, isProceed: true, hoverTips: Array.Empty<IHoverTip>()));
                     }
                     catch (Exception e)
                     {
-                        MainFile.Logger.Info("[CRASHDBG] Render: prev-page-button build failed: " + e);
+                        MainFile.Logger.Info("[CRASHDBG] ERROR Render: prev-page-button build failed: " + e);
                     }
                 }
                 if (_paginated && !isLastPage)
                 {
                     try
                     {
-                        MainFile.Logger.Info("[CRASHDBG] Render: building next-page button");
+                        MainFile.LogDebug("[CRASHDBG] Render: building next-page button");
                         evOptions.Add(new EventOption(ev, () => { PageNav(1); return Task.CompletedTask; },
                             "democracy_next_page", disableOnChosen: false, isProceed: true, hoverTips: Array.Empty<IHoverTip>()));
                     }
                     catch (Exception e)
                     {
-                        MainFile.Logger.Info("[CRASHDBG] Render: next-page-button build failed: " + e);
+                        MainFile.Logger.Info("[CRASHDBG] ERROR Render: next-page-button build failed: " + e);
                     }
                 }
                 else
                 {
                     try
                     {
-                        MainFile.Logger.Info("[CRASHDBG] Render: building next button");
+                        MainFile.LogDebug("[CRASHDBG] Render: building next button");
                         evOptions.Add(new EventOption(ev, () => { OnNext(); return Task.CompletedTask; },
                             "democracy_next", disableOnChosen: true, isProceed: true, hoverTips: Array.Empty<IHoverTip>()));
                     }
                     catch (Exception e)
                     {
-                        MainFile.Logger.Info("[CRASHDBG] Render: next-button build failed: " + e);
+                        MainFile.Logger.Info("[CRASHDBG] ERROR Render: next-button build failed: " + e);
                     }
                 }
                 // Back button removed (2026-09-02): stage navigation is forward-only.
-                MainFile.Logger.Info("[CRASHDBG] Render: built " + evOptions.Count + " options");
+                MainFile.LogDebug("[CRASHDBG] Render: built " + evOptions.Count + " options");
             }
             finally
             {
                 if (_event != null) _event.Owner = savedOwner;
-                MainFile.Logger.Info("[CRASHDBG] Render: owner restored");
+                MainFile.LogDebug("[CRASHDBG] Render: owner restored");
             }
 
             layout.AddOptions(evOptions);
-            MainFile.Logger.Info("[CRASHDBG] Render: AddOptions done");
+            MainFile.LogDebug("[CRASHDBG] Render: AddOptions done");
 
             // The native buttons resolve their text from the event's loc table, which won't
             // have our dynamic titles/descriptions — stamp our text onto the labels directly.
             RefreshAllLabels();
             RefreshAllVoteIcons();
             CompactLayout();
-            MainFile.Logger.Info("[CRASHDBG] Render: labels refreshed");
+            MainFile.LogDebug("[CRASHDBG] Render: labels refreshed");
 
             MainFile.LogVote(string.Format("Democracy: native event stage shown - {0} ({1} options, {2})",
                 _title, _options.Count, _mode));
         }
         catch (Exception e)
         {
-            MainFile.Logger.Info("[CRASHDBG] Render top-level error: " + e);
+            MainFile.Logger.Info("[CRASHDBG] ERROR Render top-level error: " + e);
         }
     }
 

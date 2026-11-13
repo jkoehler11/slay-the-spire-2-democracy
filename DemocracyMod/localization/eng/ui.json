@@ -49,5 +49,7 @@
   "DemocracyMod.WaitPanel.SelectedNothing": "You selected nothing",
   "DemocracyMod.WaitPanel.AllReady": "Everyone is ready",
   "DemocracyMod.WaitPanel.Ready": "Ready: {0}",
-  "DemocracyMod.WaitPanel.Waiting": "Waiting: {0}"
+  "DemocracyMod.WaitPanel.Waiting": "Waiting: {0}",
+  "DemocracyMod.ClaimEvent.Title": "Claim Rewards",
+  "DemocracyMod.ClaimEvent.Description": "Vote on who takes each pooled reward."
 }

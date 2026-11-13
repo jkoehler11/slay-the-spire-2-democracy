@@ -186,7 +186,7 @@ public static class NativeUiPatch
         [HarmonyPostfix]
         static void Postfix()
         {
-            MainFile.Logger.Info("[CRASHDBG] NEventLayout.OnSetupComplete fired");
+            MainFile.LogDebug("[CRASHDBG] NEventLayout.OnSetupComplete fired");
         }
     }
 
@@ -196,7 +196,7 @@ public static class NativeUiPatch
         [HarmonyPostfix]
         static void Postfix()
         {
-            MainFile.Logger.Info("[CRASHDBG] NEventRoom.SetOptions done");
+            MainFile.LogDebug("[CRASHDBG] NEventRoom.SetOptions done");
         }
     }
 
