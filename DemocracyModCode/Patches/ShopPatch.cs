@@ -82,14 +82,19 @@ public static class ShopPatch
         }
     }
 
-    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Rooms.NMerchantRoom), "HideScreen")]
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Rooms.NMerchantRoom), "OnProceedButtonReleased")]
     public static class OnShopLeave
     {
         [HarmonyPrefix]
-        static bool Prefix()
+        static bool Prefix(MegaCrit.Sts2.Core.Nodes.Rooms.NMerchantRoom __instance)
         {
             try
             {
+                // Preserve the vanilla first-time-user-experience gate: if it reports
+                // "still handling FTUE", let the original run (it returns immediately).
+                if (__instance != null && __instance.MerchantFtueCheck())
+                    return true;
+
                 if (!CombatRewardPatch.IsDemocracyActive || !RewardPool.IsShopPhaseActive)
                     return true;
 
@@ -250,13 +255,23 @@ public static class ShopPatch
         _waitPanel = null;
     }
 
-    /// <summary>Replicates the vanilla leave (HideScreen -> open map) after the vote resolves.</summary>
+    /// <summary>Replicates the vanilla leave (OnProceedButtonReleased -> RunManager.Proceed,
+    /// which enables travel and opens the map) after the vote resolves. v0.113 replaced the
+    /// old NMerchantRoom.HideScreen with OnProceedButtonReleased, whose body is
+    /// RunManager.Instance.Proceed(): try the blitz-node advance, else SetTravelEnabled(true)
+    /// + NMapScreen.Instance.Open(false).</summary>
     public static void LeaveShop()
     {
         try
         {
             IsShopFlowActive = false;
             RewardPool.IsShopPhaseActive = false;
+            var rm = RunManager.Instance;
+            if (rm != null)
+            {
+                rm.Proceed();
+                return;
+            }
             MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapScreen.Instance?.Open(false);
         }
         catch (Exception e)

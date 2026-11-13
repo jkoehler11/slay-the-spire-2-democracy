@@ -339,7 +339,7 @@ public static class PostCombatPatch
             }
             else
             {
-                _ = rm.ProceedFromTerminalRewardsScreen();
+                rm.ProceedFromTerminalRewardsScreen();
             }
         }
         catch (Exception e)
